@@ -64,8 +64,8 @@ public class AudioLevelCalculator
             int level,
             int minLevel, int maxLevel, int lastLevel)
     {
-        // we don't allow to quick level changes
-        // the speed ot fthe change is controlled by
+        // we don't allow too quick level changes
+        // the speed of the change is controlled by
         int diff = lastLevel - level;
 
         if(diff >= 0)
@@ -106,7 +106,7 @@ public class AudioLevelCalculator
             return 0;
 
         int samplesNumber = length/2;
-        int absoluteMeanSoundLevel = 0;
+        int absMeanSoundLevel = 0;
         // magic ratio which scales good visually our levels
         double levelRatio = MAX_AUDIO_LEVEL/(maxLevel - minLevel)/16;
 
@@ -122,11 +122,10 @@ public class AudioLevelCalculator
             else if (soundLevel < MIN_AUDIO_LEVEL)
                 soundLevel = MIN_AUDIO_LEVEL;
 
-            absoluteMeanSoundLevel += Math.abs(soundLevel);
+            absMeanSoundLevel += Math.abs(soundLevel);
         }
 
-        int result
-            = (int)(absoluteMeanSoundLevel/samplesNumber/levelRatio);
+        int result = (int) (absMeanSoundLevel / samplesNumber / levelRatio);
 
         result = ensureLevelRange(result, minLevel, maxLevel);
         result = animateLevel(result, minLevel, maxLevel, lastLevel);
@@ -150,22 +149,30 @@ public class AudioLevelCalculator
      * the range between <tt>minLevel</tt> and <tt>maxLevel</tt>
      */
     public static int calculateSoundPressureLevel(
-        byte[] samples, int offset, int length,
-        int minLevel, int maxLevel, int lastLevel)
+            byte[] samples, int offset, int length,
+            int minLevel, int maxLevel, int lastLevel)
     {
         double rms = 0;
         int sampleCount = 0;
 
-        while (offset < length)
+        for (; offset < length; offset += 2)
         {
             double sample = ArrayIOUtils.readShort(samples, offset);
 
             sample /= Short.MAX_VALUE;
             rms += sample * sample;
             sampleCount++;
-
-            offset += 2;
         }
+
+        return
+            calculateSoundPressureLevel(rms, sampleCount, minLevel, maxLevel);
+    }
+
+    private static int calculateSoundPressureLevel(
+            double rms,
+            int sampleCount,
+            int minLevel, int maxLevel)
+    {
         rms = (sampleCount == 0) ? 0 : Math.sqrt(rms / sampleCount);
 
         double db;
@@ -176,6 +183,42 @@ public class AudioLevelCalculator
             db = -MAX_SOUND_PRESSURE_LEVEL;
 
         return ensureLevelRange((int) db, minLevel, maxLevel);
+    }
+
+    /**
+     * Calculates the sound pressure level of a signal with specific
+     * <tt>samples</tt> and makes sure that it is expressed as a value in the
+     * range between <tt>minLevel</tt> and <tt>maxLevel</tt>.
+     *
+     * @param samples the samples of the signal to calculate the sound pressure
+     * level of
+     * @param offset the offset in <tt>samples</tt> in which the samples start
+     * @param length the length in bytes of the samples in <tt>samples<tt>
+     * starting at <tt>offset</tt>
+     * @param minLevel the minimum value of the level to be returned
+     * @param maxLevel the maximum value of the level to be returned
+     * @param lastLevel the last level which has been previously calculated
+     * @return the sound pressure level of the specified signal as a value in
+     * the range between <tt>minLevel</tt> and <tt>maxLevel</tt>
+     */
+    public static int calculateSoundPressureLevel(
+            short[] samples, int offset, int length,
+            int minLevel, int maxLevel, int lastLevel)
+    {
+        double rms = 0;
+        int sampleCount = 0;
+
+        for (; offset < length; offset++)
+        {
+            double sample = samples[offset];
+
+            sample /= Short.MAX_VALUE;
+            rms += sample * sample;
+            sampleCount++;
+        }
+
+        return
+            calculateSoundPressureLevel(rms, sampleCount, minLevel, maxLevel);
     }
 
     /**

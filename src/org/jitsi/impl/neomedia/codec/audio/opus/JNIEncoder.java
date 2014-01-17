@@ -91,41 +91,28 @@ public class JNIEncoder
         int supportedInputCount = SUPPORTED_INPUT_SAMPLE_RATES.length;
 
         SUPPORTED_INPUT_FORMATS = new Format[supportedInputCount];
-//        SUPPORTED_INPUT_FORMATS = new Format[supportedInputCount*2];
-        for (int i = 0; i < supportedInputCount; i++)
+        for (int i = 0; i < supportedInputCount;)
         {
-            SUPPORTED_INPUT_FORMATS[i]
+            double sampleRate = SUPPORTED_INPUT_SAMPLE_RATES[i];
+
+            SUPPORTED_INPUT_FORMATS[i++]
                 = new AudioFormat(
                         AudioFormat.LINEAR,
-                        SUPPORTED_INPUT_SAMPLE_RATES[i],
+                        sampleRate,
                         16,
                         1,
-                        AbstractAudioRenderer.NATIVE_AUDIO_FORMAT_ENDIAN,
+                        AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN,
                         AudioFormat.SIGNED,
                         /* frameSizeInBits */ Format.NOT_SPECIFIED,
                         /* frameRate */ Format.NOT_SPECIFIED,
-                        Format.byteArray);
+                        Format.shortArray);
         }
         /*
-         * Using stereo input formats leads to problems (at least when used with
-         * pulse audio). It is unclear whether they are rooted in this encoder
-         * or somewhere else in the code. So stereo input formats are disabled
-         * until we make sure that they work properly.
+         * TODO Using stereo input formats leads to problems (at least when used
+         * with PulseAudio). It is unclear whether they are rooted in this
+         * encoder or somewhere else in the code. So stereo input formats are
+         * disabled until we make sure that they work properly.
          */
-//        for (int i = 0; i < supportedInputCount; i++)
-//        {
-//            SUPPORTED_INPUT_FORMATS[i+supportedInputCount]
-//                = new AudioFormat(
-//                        AudioFormat.LINEAR,
-//                        SUPPORTED_INPUT_SAMPLE_RATES[i],
-//                        16,
-//                        2,
-//                        AbstractAudioRenderer.NATIVE_AUDIO_FORMAT_ENDIAN,
-//                        AudioFormat.SIGNED,
-//                        /* frameSizeInBits */ Format.NOT_SPECIFIED,
-//                        /* frameRate */ Format.NOT_SPECIFIED,
-//                        Format.byteArray);
-//        }
     }
 
     /**
@@ -155,13 +142,6 @@ public class JNIEncoder
     private long encoder = 0;
 
     /**
-     * The size in bytes of an audio frame input by this instance. Automatically
-     * calculated, based on {@link #frameSizeInMillis} and the
-     * <tt>inputFormat</tt> of this instance.
-     */
-    private int frameSizeInBytes;
-
-    /**
      * The size/duration in milliseconds of an audio frame output by this
      * instance. The possible values are: 2.5, 5, 10, 20, 40 and 60. The default
      * value is 20.
@@ -176,6 +156,13 @@ public class JNIEncoder
     private int frameSizeInSamplesPerChannel;
 
     /**
+     * The size in <tt>short</tt>s of an audio frame input by this instance.
+     * Automatically calculated, based on {@link #frameSizeInMillis} and the
+     * <tt>inputFormat</tt> of this instance.
+     */
+    private int frameSizeInShorts;
+
+    /**
      * The minimum expected packet loss percentage to set to the encoder.
      */
     private int minPacketLoss = 0;
@@ -187,7 +174,7 @@ public class JNIEncoder
      * need to be prepended to a subsequent input <tt>Buffer</tt> in order to
      * process a total of {@link #inputFrameSize()} bytes.
      */
-    private byte[] prevIn = null;
+    private short[] prevIn;
 
     /**
      * The length of the audio data in {@link #prevIn}.
@@ -259,7 +246,7 @@ public class JNIEncoder
         String bandwidthStr
             = cfg.getString(Constants.PROP_OPUS_BANDWIDTH, "auto");
 
-        bandwidth = Opus.OPUS_AUTO;
+        bandwidth = Opus.AUTO;
         if("fb".equals(bandwidthStr))
             bandwidth = Opus.BANDWIDTH_FULLBAND;
         else if("swb".equals(bandwidthStr))
@@ -339,39 +326,39 @@ public class JNIEncoder
             return BUFFER_PROCESSED_FAILED;
         }
 
-        byte[] in = (byte[]) inBuffer.getData();
+        short[] in = (short[]) inBuffer.getData();
         int inLength = inBuffer.getLength();
         int inOffset = inBuffer.getOffset();
 
         if ((prevIn != null) && (prevInLength > 0))
         {
-            if (prevInLength < frameSizeInBytes)
+            if (prevInLength < frameSizeInShorts)
             {
-                if (prevIn.length < frameSizeInBytes)
+                if (prevIn.length < frameSizeInShorts)
                 {
-                    byte[] newPrevIn = new byte[frameSizeInBytes];
+                    short[] newPrevIn = new short[frameSizeInShorts];
 
                     System.arraycopy(prevIn, 0, newPrevIn, 0, prevIn.length);
                     prevIn = newPrevIn;
                 }
 
-                int bytesToCopyFromInToPrevIn
-                    = Math.min(frameSizeInBytes - prevInLength, inLength);
+                int shortsToCopyFromInToPrevIn
+                    = Math.min(frameSizeInShorts - prevInLength, inLength);
 
-                if (bytesToCopyFromInToPrevIn > 0)
+                if (shortsToCopyFromInToPrevIn > 0)
                 {
                     System.arraycopy(
                             in, inOffset,
                             prevIn, prevInLength,
-                            bytesToCopyFromInToPrevIn);
-                    prevInLength += bytesToCopyFromInToPrevIn;
-                    inLength -= bytesToCopyFromInToPrevIn;
+                            shortsToCopyFromInToPrevIn);
+                    prevInLength += shortsToCopyFromInToPrevIn;
+                    inLength -= shortsToCopyFromInToPrevIn;
                     inBuffer.setLength(inLength);
-                    inBuffer.setOffset(inOffset + bytesToCopyFromInToPrevIn);
+                    inBuffer.setOffset(inOffset + shortsToCopyFromInToPrevIn);
                 }
             }
 
-            if (prevInLength == frameSizeInBytes)
+            if (prevInLength == frameSizeInShorts)
             {
                 in = prevIn;
                 inOffset = 0;
@@ -393,10 +380,10 @@ public class JNIEncoder
             discardOutputBuffer(outBuffer);
             return BUFFER_PROCESSED_OK;
         }
-        else if (inLength < frameSizeInBytes)
+        else if (inLength < frameSizeInShorts)
         {
             if ((prevIn == null) || (prevIn.length < inLength))
-                prevIn = new byte[frameSizeInBytes];
+                prevIn = new short[frameSizeInShorts];
             System.arraycopy(in, inOffset, prevIn, 0, inLength);
             prevInLength = inLength;
             outBuffer.setLength(0);
@@ -405,9 +392,9 @@ public class JNIEncoder
         }
         else
         {
-            inLength -= frameSizeInBytes;
+            inLength -= frameSizeInShorts;
             inBuffer.setLength(inLength);
-            inBuffer.setOffset(inOffset + frameSizeInBytes);
+            inBuffer.setOffset(inOffset + frameSizeInShorts);
         }
 
         // At long last, do the actual encoding.
@@ -575,10 +562,7 @@ public class JNIEncoder
 
             frameSizeInSamplesPerChannel
                 = (sampleRate * frameSizeInMillis) / 1000;
-            frameSizeInBytes
-                = 2 /* sizeof(opus_int16) */
-                    * channels
-                    * frameSizeInSamplesPerChannel;
+            frameSizeInShorts = channels * frameSizeInSamplesPerChannel;
         }
         return setInputFormat;
     }

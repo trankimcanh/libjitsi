@@ -212,7 +212,7 @@ public class JavaDecoder
         int inOffset = inBuffer.getOffset();
         int inLength = inBuffer.getLength();
 
-        short[] out = validateShortArraySize(outBuffer, frameLength);
+        short[] out = validateShortArraySize(outBuffer, frameLength, false);
         int outOffset = 0;
 
         long seqNo = inBuffer.getSequenceNumber();

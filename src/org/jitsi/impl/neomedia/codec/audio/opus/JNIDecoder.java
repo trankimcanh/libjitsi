@@ -54,11 +54,11 @@ public class JNIDecoder
                             48000,
                             16,
                             1,
-                            AbstractAudioRenderer.NATIVE_AUDIO_FORMAT_ENDIAN,
+                            AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN,
                             AudioFormat.SIGNED,
                             /* frameSizeInBits */ Format.NOT_SPECIFIED,
                             /* frameRate */ Format.NOT_SPECIFIED,
-                            Format.byteArray)
+                            Format.shortArray)
                 };
 
     static
@@ -99,17 +99,17 @@ public class JNIDecoder
     private int nbDecodedFec = 0;
 
     /**
-     * The size in bytes of an audio frame in the terms of the output
+     * The size in <tt>short</tt>s of an audio frame in the terms of the output
      * <tt>AudioFormat</tt> of this instance i.e. based on the values of the
      * <tt>sampleSizeInBits</tt> and <tt>channels</tt> properties of the
      * <tt>outputFormat</tt> of this instance.
      */
-    private int outputFrameSize;
+    private int outFrameSize;
 
     /**
      * The sample rate of the audio data output by this instance.
      */
-    private int outputSampleRate;
+    private int outSampleRate;
 
     /**
      * Initializes a new <tt>JNIDecoder</tt> instance.
@@ -153,7 +153,7 @@ public class JNIDecoder
     {
         if (decoder == 0)
         {
-            decoder = Opus.decoder_create(outputSampleRate, channels);
+            decoder = Opus.decoder_create(outSampleRate, channels);
             if (decoder == 0)
                 throw new ResourceUnavailableException("opus_decoder_create");
 
@@ -219,12 +219,12 @@ public class JNIDecoder
             inLength
                 = (lostSeqNoCount == 1) ? inLength /* FEC */ : 0 /* PLC */;
 
-            byte[] out
-                = validateByteArraySize(
+            short[] out
+                = validateShortArraySize(
                         outBuffer,
                         outOffset
                             + lastFrameSizeInSamplesPerChannel
-                                * outputFrameSize,
+                                * outFrameSize,
                         outOffset != 0);
             int frameSizeInSamplesPerChannel
                 = Opus.decode(
@@ -235,11 +235,11 @@ public class JNIDecoder
 
             if (frameSizeInSamplesPerChannel > 0)
             {
-                int frameSizeInBytes
-                    = frameSizeInSamplesPerChannel * outputFrameSize;
+                int frameSizeInShorts
+                    = frameSizeInSamplesPerChannel * outFrameSize;
 
-                outLength += frameSizeInBytes;
-                outOffset += frameSizeInBytes;
+                outLength += frameSizeInShorts;
+                outOffset += frameSizeInShorts;
                 totalFrameSizeInSamplesPerChannel
                     += frameSizeInSamplesPerChannel;
 
@@ -257,11 +257,11 @@ public class JNIDecoder
         {
             int frameSizeInSamplesPerChannel
                 = Opus.decoder_get_nb_samples(decoder, in, inOffset, inLength);
-            byte[] out
-                = validateByteArraySize(
+            short[] out
+                = validateShortArraySize(
                         outBuffer,
                         outOffset
-                            + frameSizeInSamplesPerChannel * outputFrameSize,
+                            + frameSizeInSamplesPerChannel * outFrameSize,
                         outOffset != 0);
 
             frameSizeInSamplesPerChannel
@@ -272,11 +272,11 @@ public class JNIDecoder
                         /* decodeFEC */ 0);
             if (frameSizeInSamplesPerChannel > 0)
             {
-                int frameSizeInBytes
-                    = frameSizeInSamplesPerChannel * outputFrameSize;
+                int frameSizeInShorts
+                    = frameSizeInSamplesPerChannel * outFrameSize;
 
-                outLength += frameSizeInBytes;
-                outOffset += frameSizeInBytes;
+                outLength += frameSizeInShorts;
+                outOffset += frameSizeInShorts;
                 totalFrameSizeInSamplesPerChannel
                     += frameSizeInSamplesPerChannel;
 
@@ -298,7 +298,7 @@ public class JNIDecoder
         {
             outBuffer.setDuration(
                     totalFrameSizeInSamplesPerChannel * channels * 1000L * 1000L
-                        / outputSampleRate);
+                        / outSampleRate);
             outBuffer.setFormat(getOutputFormat());
             outBuffer.setLength(outLength);
             outBuffer.setOffset(0);
@@ -355,6 +355,16 @@ public class JNIDecoder
                                 af.getSampleRate(),
                                 16,
                                 1,
+                                AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN,
+                                AudioFormat.SIGNED,
+                                /* frameSizeInBits */ Format.NOT_SPECIFIED,
+                                /* frameRate */ Format.NOT_SPECIFIED,
+                                Format.shortArray),
+                        new AudioFormat(
+                                AudioFormat.LINEAR,
+                                af.getSampleRate(),
+                                16,
+                                1,
                                 AbstractAudioRenderer
                                     .NATIVE_AUDIO_FORMAT_ENDIAN,
                                 AudioFormat.SIGNED,
@@ -393,8 +403,9 @@ public class JNIDecoder
         {
             AudioFormat af = (AudioFormat) setOutputFormat;
 
-            outputFrameSize = (af.getSampleSizeInBits() / 8) * af.getChannels();
-            outputSampleRate = (int) af.getSampleRate();
+            outFrameSize
+                = af.getChannels() * (af.getSampleSizeInBits() / 8) / 2;
+            outSampleRate = (int) af.getSampleRate();
         }
         return setOutputFormat;
     }

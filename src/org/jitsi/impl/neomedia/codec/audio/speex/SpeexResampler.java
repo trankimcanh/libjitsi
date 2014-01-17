@@ -11,10 +11,11 @@ import java.util.*;
 import javax.media.*;
 import javax.media.format.*;
 
-import net.java.sip.communicator.impl.neomedia.codec.audio.speex.*;
 import net.sf.fmj.media.*;
 
+import org.jitsi.impl.neomedia.*;
 import org.jitsi.impl.neomedia.codec.*;
+import org.jitsi.impl.neomedia.jmfext.media.renderer.audio.*;
 
 /**
  * Implements an audio resampler using Speex.
@@ -28,7 +29,7 @@ public class SpeexResampler
      * The list of <tt>Format</tt>s of audio data supported as input and output
      * by <tt>SpeexResampler</tt> instances.
      */
-    private static final Format[] SUPPORTED_FORMATS;
+    private static final AudioFormat[] SUPPORTED_FORMATS;
 
     /**
      * The list of sample rates of audio data supported as input and output by
@@ -55,51 +56,51 @@ public class SpeexResampler
 
         int supportedCount = SUPPORTED_SAMPLE_RATES.length;
 
-        SUPPORTED_FORMATS = new Format[4 * supportedCount];
-        for (int i = 0; i < supportedCount; i++)
+        SUPPORTED_FORMATS = new AudioFormat[4 * supportedCount];
+        for (int i = 0, j = 0; i < supportedCount; i++)
         {
-            int j = 4 * i;
+            double sampleRate = SUPPORTED_SAMPLE_RATES[i];
 
-            SUPPORTED_FORMATS[j]
+            SUPPORTED_FORMATS[j++]
                 = new AudioFormat(
                         AudioFormat.LINEAR,
-                        SUPPORTED_SAMPLE_RATES[i],
+                        sampleRate,
                         16 /* sampleSizeInBits */,
                         1 /* channels */,
-                        AudioFormat.LITTLE_ENDIAN,
+                        AbstractAudioRenderer.NATIVE_AUDIO_FORMAT_ENDIAN,
                         AudioFormat.SIGNED,
                         Format.NOT_SPECIFIED /* frameSizeInBits */,
                         Format.NOT_SPECIFIED /* frameRate */,
                         Format.byteArray);
-            SUPPORTED_FORMATS[j + 1]
+            SUPPORTED_FORMATS[j++]
                 = new AudioFormat(
                         AudioFormat.LINEAR,
-                        SUPPORTED_SAMPLE_RATES[i],
+                        sampleRate,
                         16 /* sampleSizeInBits */,
                         1 /* channels */,
-                        AudioFormat.LITTLE_ENDIAN,
+                        AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN,
                         AudioFormat.SIGNED,
                         Format.NOT_SPECIFIED /* frameSizeInBits */,
                         Format.NOT_SPECIFIED /* frameRate */,
                         Format.shortArray);
-            SUPPORTED_FORMATS[j + 2]
+            SUPPORTED_FORMATS[j++]
                 = new AudioFormat(
                         AudioFormat.LINEAR,
-                        SUPPORTED_SAMPLE_RATES[i],
+                        sampleRate,
                         16 /* sampleSizeInBits */,
                         2 /* channels */,
-                        AudioFormat.LITTLE_ENDIAN,
+                        AbstractAudioRenderer.NATIVE_AUDIO_FORMAT_ENDIAN,
                         AudioFormat.SIGNED,
                         Format.NOT_SPECIFIED /* frameSizeInBits */,
                         Format.NOT_SPECIFIED /* frameRate */,
                         Format.byteArray);
-            SUPPORTED_FORMATS[j + 3]
+            SUPPORTED_FORMATS[j++]
                 = new AudioFormat(
                         AudioFormat.LINEAR,
-                        SUPPORTED_SAMPLE_RATES[i],
+                        sampleRate,
                         16 /* sampleSizeInBits */,
                         2 /* channels */,
-                        AudioFormat.LITTLE_ENDIAN,
+                        AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN,
                         AudioFormat.SIGNED,
                         Format.NOT_SPECIFIED /* frameSizeInBits */,
                         Format.NOT_SPECIFIED /* frameRate */,
@@ -116,12 +117,12 @@ public class SpeexResampler
     /**
      * The input sample rate configured in {@link #resampler}.
      */
-    private int inputSampleRate;
+    private int inSampleRate;
 
     /**
      * The output sample rate configured in {@link #resampler}.
      */
-    private int outputSampleRate;
+    private int outSampleRate;
 
     /**
      * The pointer to the native <tt>SpeexResamplerState</tt> which is
@@ -147,7 +148,7 @@ public class SpeexResampler
     {
         if (resampler != 0)
         {
-            Speex.speex_resampler_destroy(resampler);
+            Speex.resampler_destroy(resampler);
             resampler = 0;
         }
     }
@@ -197,232 +198,253 @@ public class SpeexResampler
         int inSampleRate = (int) inAudioFormat.getSampleRate();
         AudioFormat outAudioFormat = (AudioFormat) getOutputFormat();
         int outSampleRate = (int) outAudioFormat.getSampleRate();
+        int ret;
 
         if (inSampleRate == outSampleRate)
         {
-            // passthrough
-            Class<?> inDataType = inAudioFormat.getDataType();
-            Class<?> outDataType = outAudioFormat.getDataType();
-
-            if (Format.byteArray.equals(inDataType))
-            {
-                byte[] input = (byte[]) inBuffer.getData();
-
-                if (Format.byteArray.equals(outDataType))
-                {
-                    int length = (input == null) ? 0 : input.length;
-                    byte[] output
-                        = validateByteArraySize(outBuffer, length, false);
-
-                    if ((input != null) && (output != null))
-                        System.arraycopy(input, 0, output, 0, length);
-                    outBuffer.setFormat(inBuffer.getFormat());
-                    outBuffer.setLength(inBuffer.getLength());
-                    outBuffer.setOffset(inBuffer.getOffset());
-                }
-                else
-                {
-                    int inLength = inBuffer.getLength();
-                    int outOffset = 0;
-                    int outLength = inLength / 2;
-                    short[] output
-                        = validateShortArraySize(outBuffer, outLength);
-
-                    for (int i = inBuffer.getOffset(), o = outOffset;
-                            o < outLength;
-                            o++)
-                    {
-                        output[o]
-                            = (short)
-                                (((input[i++] & 0xFF)
-                                        | (input[i++] & 0xFF) << 8));
-                    }
-                    outBuffer.setFormat(outAudioFormat);
-                    outBuffer.setLength(outLength);
-                    outBuffer.setOffset(outOffset);
-                }
-            }
-            else
-            {
-                short[] input = (short[]) inBuffer.getData();
-
-                if (Format.byteArray.equals(outDataType))
-                {
-                    int inLength = inBuffer.getLength();
-                    int outOffset = 0;
-                    int outLength = inLength * 2;
-                    byte[] output
-                        = validateByteArraySize(outBuffer, outLength, false);
-
-                    for (int i = inBuffer.getOffset(), o = outOffset;
-                            o < outLength;
-                            i++)
-                    {
-                        short s = input[i];
-
-                        output[o++] = (byte) (s & 0x00FF);
-                        output[o++] = (byte) ((s & 0xFF00) >>> 8);
-                    }
-                    outBuffer.setFormat(outAudioFormat);
-                    outBuffer.setLength(outLength);
-                    outBuffer.setOffset(outOffset);
-                }
-                else
-                {
-                    int length = (input == null) ? 0 : input.length;
-                    short[] output
-                        = validateShortArraySize(outBuffer, length);
-
-                    if ((input != null) && (output != null))
-                        System.arraycopy(input, 0, output, 0, length);
-                    outBuffer.setFormat(inBuffer.getFormat());
-                    outBuffer.setLength(inBuffer.getLength());
-                    outBuffer.setOffset(inBuffer.getOffset());
-                }
-            }
+            ret
+                = passThrough(
+                        inBuffer, inAudioFormat,
+                        outBuffer, outAudioFormat);
         }
         else
         {
-            int channels = inAudioFormat.getChannels();
-
-            if (outAudioFormat.getChannels() != channels)
-                return BUFFER_PROCESSED_FAILED;
-
-            boolean channelsHaveChanged = (this.channels != channels);
-
-            if (channelsHaveChanged
-                    || (this.inputSampleRate != inSampleRate)
-                    || (this.outputSampleRate != outSampleRate))
-            {
-                if (channelsHaveChanged && (resampler != 0))
-                {
-                    Speex.speex_resampler_destroy(resampler);
-                    resampler = 0;
-                }
-                if (resampler == 0)
-                {
-                    resampler
-                        = Speex.speex_resampler_init(
-                                channels,
-                                inSampleRate,
-                                outSampleRate,
-                                Speex.SPEEX_RESAMPLER_QUALITY_VOIP,
-                                0);
-                }
-                else
-                {
-                    Speex.speex_resampler_set_rate(
-                            resampler,
-                            inSampleRate,
-                            outSampleRate);
-                }
-                if (resampler != 0)
-                {
-                    this.inputSampleRate = inSampleRate;
-                    this.outputSampleRate = outSampleRate;
-                    this.channels = channels;
-                }
-            }
-            if (resampler == 0)
-                return BUFFER_PROCESSED_FAILED;
-
-            byte[] in = (byte[]) inBuffer.getData();
-            int inLength = inBuffer.getLength();
-            int frameSize
-                = channels * (inAudioFormat.getSampleSizeInBits() / 8);
-            /*
-             * XXX The numbers of input and output samples which are to be
-             * specified to the function speex_resampler_process_interleaved_int
-             * are per-channel.
-             */
-            int inSampleCount = inLength / frameSize;
-            int outSampleCount = (inSampleCount * outSampleRate) / inSampleRate;
-            byte[] out
-                = validateByteArraySize(
-                        outBuffer,
-                        outSampleCount * frameSize,
-                        false);
-
-            /*
-             * XXX The method Speex.speex_resampler_process_interleaved_int will
-             * crash if in is null.
-             */
-            if (inSampleCount == 0)
-                outSampleCount = 0;
-            else
-            {
-                outSampleCount
-                    = Speex.speex_resampler_process_interleaved_int(
-                            resampler,
-                            in, inBuffer.getOffset(), inSampleCount,
-                            out, 0, outSampleCount);
-            }
-            outBuffer.setFormat(outAudioFormat);
-            outBuffer.setLength(outSampleCount * frameSize);
-            outBuffer.setOffset(0);
+            ret
+                = resample(
+                        inBuffer, inAudioFormat, inSampleRate,
+                        outBuffer, outAudioFormat, outSampleRate);
+        }
+        if (ret != BUFFER_PROCESSED_FAILED)
+        {
+            outBuffer.setDuration(inBuffer.getDuration());
+            outBuffer.setEOM(inBuffer.isEOM());
+            outBuffer.setFlags(inBuffer.getFlags());
+            outBuffer.setHeader(inBuffer.getHeader());
+            outBuffer.setSequenceNumber(inBuffer.getSequenceNumber());
+            outBuffer.setTimeStamp(inBuffer.getTimeStamp());
         }
 
-        outBuffer.setDuration(inBuffer.getDuration());
-        outBuffer.setEOM(inBuffer.isEOM());
-        outBuffer.setFlags(inBuffer.getFlags());
-        outBuffer.setHeader(inBuffer.getHeader());
-        outBuffer.setSequenceNumber(inBuffer.getSequenceNumber());
-        outBuffer.setTimeStamp(inBuffer.getTimeStamp());
-
-        return BUFFER_PROCESSED_OK;
+        return ret;
     }
 
     /**
      * Get the output formats matching a specific input format.
      *
-     * @param inputFormat the input format to get the matching output formats of
-     * @return the output formats matching the specified input format
+     * @param inFormat the input format to get the matching output formats of
+     * @return the output formats matching the specified <tt>inFormat</tt>
      * @see AbstractCodecExt#getMatchingOutputFormats(Format)
      */
     @Override
-    protected Format[] getMatchingOutputFormats(Format inputFormat)
+    protected Format[] getMatchingOutputFormats(Format inFormat)
     {
-        Class<?> inDataType = inputFormat.getDataType();
-        List<Format> matchingOutputFormats = new ArrayList<Format>();
-
-        if (inputFormat instanceof AudioFormat)
+        if (inFormat instanceof AudioFormat)
         {
-            AudioFormat inAudioFormat = (AudioFormat) inputFormat;
+            AudioFormat inAudioFormat = (AudioFormat) inFormat;
             int inChannels = inAudioFormat.getChannels();
-            double inSampleRate = inAudioFormat.getSampleRate();
+            List<Format> matchingOutFormats = new ArrayList<Format>();
 
-            for (Format supportedFormat : SUPPORTED_FORMATS)
+            for (AudioFormat supportedFormat : SUPPORTED_FORMATS)
             {
-                AudioFormat supportedAudioFormat
-                    = (AudioFormat) supportedFormat;
+                if (supportedFormat.getChannels() == inChannels)
+                    matchingOutFormats.add(supportedFormat);
+            }
+            return
+                matchingOutFormats.toArray(
+                        new Format[matchingOutFormats.size()]);
+        }
+        else
+            return null;
+    }
 
-                if (supportedAudioFormat.getChannels() != inChannels)
-                    continue;
+    private int passThrough(
+            Buffer inBuffer, AudioFormat inFormat,
+            Buffer outBuffer, AudioFormat outFormat)
+    {
+        Class<?> inDataType = inFormat.getDataType();
+        int inLength = inBuffer.getLength();
+        int inOffset = inBuffer.getOffset();
+        Class<?> outDataType = outFormat.getDataType();
 
-                if ((Format.byteArray.equals(supportedFormat.getDataType())
-                            && Format.byteArray.equals(inDataType))
-                        || (supportedAudioFormat.getSampleRate()
-                                == inSampleRate))
+        if (Format.byteArray.equals(inDataType))
+        {
+            byte[] in = (byte[]) inBuffer.getData();
+
+            if (Format.byteArray.equals(outDataType))
+            {
+                byte[] out = validateByteArraySize(outBuffer, inLength, false);
+
+                if ((in != null) && (out != null))
+                    System.arraycopy(in, inOffset, out, 0, inLength);
+                outBuffer.setFormat(inBuffer.getFormat());
+                outBuffer.setLength(inLength);
+            }
+            else
+            {
+                int outLength = inLength / 2;
+                short[] out
+                    = validateShortArraySize(outBuffer, outLength, false);
+
+                if (outFormat.getEndian() == AudioFormat.LITTLE_ENDIAN)
                 {
-                    matchingOutputFormats.add(supportedFormat);
+                    for (int i = inOffset, o = 0; o < outLength; o++)
+                        out[o] = (short) ((in[i++] << 8) | (in[i++] & 0xFF));
                 }
+                else
+                {
+                    for (int i = inOffset, o = 0; o < outLength; i += 2, o++)
+                        out[o] = ArrayIOUtils.readShort(in, i);
+                }
+                outBuffer.setFormat(outFormat);
+                outBuffer.setLength(outLength);
             }
         }
-        return
-            matchingOutputFormats.toArray(
-                    new Format[matchingOutputFormats.size()]);
+        else
+        {
+            short[] in = (short[]) inBuffer.getData();
+
+            if (Format.byteArray.equals(outDataType))
+            {
+                int outLength = inLength * 2;
+                byte[] out = validateByteArraySize(outBuffer, outLength, false);
+
+                if (outFormat.getEndian() == AudioFormat.BIG_ENDIAN)
+                {
+                    for (int i = inOffset, o = 0; o < outLength; i++)
+                    {
+                        short s = in[i];
+
+                        out[o++] = (byte) (s >> 8);
+                        out[o++] = (byte) (s & 0xFF);
+                    }
+                }
+                else
+                {
+                    for (int i = inOffset, o = 0; o < outLength; i++, o += 2)
+                        ArrayIOUtils.writeShort(in[i], out, o);
+                }
+                outBuffer.setFormat(outFormat);
+                outBuffer.setLength(outLength);
+            }
+            else
+            {
+                short[] out
+                    = validateShortArraySize(outBuffer, inLength, false);
+
+                if ((in != null) && (out != null))
+                    System.arraycopy(in, inOffset, out, 0, inLength);
+                outBuffer.setFormat(inBuffer.getFormat());
+                outBuffer.setLength(inLength);
+            }
+        }
+        outBuffer.setOffset(0);
+
+        return BUFFER_PROCESSED_OK;
+    }
+
+    private int resample(
+            Buffer inBuffer, AudioFormat inAudioFormat, int inSampleRate,
+            Buffer outBuffer, AudioFormat outAudioFormat, int outSampleRate)
+    {
+        int channels = inAudioFormat.getChannels();
+
+        if (outAudioFormat.getChannels() != channels)
+            return BUFFER_PROCESSED_FAILED;
+
+        boolean channelsHaveChanged = (this.channels != channels);
+
+        if (channelsHaveChanged
+                || (this.inSampleRate != inSampleRate)
+                || (this.outSampleRate != outSampleRate))
+        {
+            if (channelsHaveChanged && (resampler != 0))
+            {
+                Speex.resampler_destroy(resampler);
+                resampler = 0;
+            }
+            if (resampler == 0)
+            {
+                resampler
+                    = Speex.resampler_init(
+                            channels,
+                            inSampleRate,
+                            outSampleRate,
+                            Speex.RESAMPLER_QUALITY_VOIP,
+                            0);
+            }
+            else
+            {
+                Speex.resampler_set_rate(
+                        resampler,
+                        inSampleRate,
+                        outSampleRate);
+            }
+            if (resampler != 0)
+            {
+                this.inSampleRate = inSampleRate;
+                this.outSampleRate = outSampleRate;
+                this.channels = channels;
+            }
+        }
+        if (resampler == 0)
+            return BUFFER_PROCESSED_FAILED;
+
+        int inLength = inBuffer.getLength();
+        int inOffset = inBuffer.getOffset();
+
+        if (Format.shortArray.equals(inAudioFormat.getDataType()))
+        {
+            inLength *= 2;
+            inOffset *= 2;
+        }
+
+        int frameSize = channels * (inAudioFormat.getSampleSizeInBits() / 8);
+        /*
+         * XXX The numbers of input and output samples which are to be specified
+         * to the function resampler_process_interleaved_int are per-channel.
+         */
+        int inSampleCount = inLength / frameSize;
+        int outSampleCount = inSampleCount * outSampleRate / inSampleRate;
+        int outLength;
+        Object out;
+
+        if (Format.byteArray.equals(outAudioFormat.getDataType()))
+        {
+            outLength = outSampleCount * frameSize;
+            out = validateByteArraySize(outBuffer, outLength, false);
+        }
+        else
+        {
+            outLength = outSampleCount * frameSize / 2;
+            out = validateShortArraySize(outBuffer, outLength, false);
+        }
+
+        /*
+         * XXX The method Speex.resampler_process_interleaved_int will crash if
+         * in is null.
+         */
+        if (inSampleCount == 0)
+        {
+            outSampleCount = 0;
+        }
+        else
+        {
+            Object in = inBuffer.getData();
+
+            outSampleCount
+                = Speex.resampler_process_interleaved_int(
+                        resampler,
+                        in, inOffset, inSampleCount,
+                        out, 0, outSampleCount);
+        }
+        outBuffer.setFormat(outAudioFormat);
+        outBuffer.setLength(outLength);
+        outBuffer.setOffset(0);
+
+        return BUFFER_PROCESSED_OK;
     }
 
     /**
-     * Sets the <tt>Format</tt> of the media data to be input for processing in
-     * this <tt>Codec</tt>.
-     *
-     * @param format the <tt>Format</tt> of the media data to be input for
-     * processing in this <tt>Codec</tt>
-     * @return the <tt>Format</tt> of the media data to be input for processing
-     * in this <tt>Codec</tt> if <tt>format</tt> is compatible with this
-     * <tt>Codec</tt>; otherwise, <tt>null</tt>
-     * @see AbstractCodecExt#setInputFormat(Format)
+     * {@inheritDoc}
      */
     @Override
     public Format setInputFormat(Format format)
@@ -431,25 +453,27 @@ public class SpeexResampler
 
         if (inFormat != null)
         {
+            AudioFormat outFormat = (AudioFormat) this.outputFormat;
             double outSampleRate;
+            int outEndian;
             Class<?> outDataType;
 
-            if (outputFormat == null)
+            if (outFormat == null)
             {
                 outSampleRate = inFormat.getSampleRate();
+                outEndian = inFormat.getEndian();
                 outDataType = inFormat.getDataType();
             }
             else
             {
-                AudioFormat outAudioFormat = (AudioFormat) outputFormat;
-
-                outSampleRate = outAudioFormat.getSampleRate();
-                outDataType = outAudioFormat.getDataType();
-                /*
-                 * Conversion between data types is only supported when not
-                 * resampling but rather passing through.
-                 */
-                if (outSampleRate != inFormat.getSampleRate())
+                outSampleRate = outFormat.getSampleRate();
+                if (outSampleRate == Format.NOT_SPECIFIED)
+                    outSampleRate = inFormat.getSampleRate();
+                outEndian = outFormat.getEndian();
+                if (outEndian == Format.NOT_SPECIFIED)
+                    outEndian = inFormat.getEndian();
+                outDataType = outFormat.getDataType();
+                if (outDataType == null)
                     outDataType = inFormat.getDataType();
             }
 
@@ -459,12 +483,13 @@ public class SpeexResampler
                             outSampleRate,
                             inFormat.getSampleSizeInBits(),
                             inFormat.getChannels(),
-                            inFormat.getEndian(),
+                            outEndian,
                             inFormat.getSigned(),
-                            Format.NOT_SPECIFIED,
-                            Format.NOT_SPECIFIED,
+                            /* frameSizeInBits */ Format.NOT_SPECIFIED,
+                            /* frameRate */ Format.NOT_SPECIFIED,
                             outDataType));
         }
+
         return inFormat;
     }
 }

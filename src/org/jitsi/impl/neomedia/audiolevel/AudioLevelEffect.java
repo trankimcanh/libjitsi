@@ -10,6 +10,7 @@ import javax.media.*;
 import javax.media.format.*;
 
 import org.jitsi.impl.neomedia.control.*;
+import org.jitsi.impl.neomedia.jmfext.media.renderer.audio.*;
 import org.jitsi.service.neomedia.event.*;
 
 /**
@@ -66,13 +67,24 @@ public class AudioLevelEffect
                     {
                         new AudioFormat(
                                 AudioFormat.LINEAR,
-                                Format.NOT_SPECIFIED,
+                                /* sampleRate */ Format.NOT_SPECIFIED,
                                 16,
                                 1,
-                                AudioFormat.LITTLE_ENDIAN,
+                                AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN,
                                 AudioFormat.SIGNED,
+                                /* frameSizeInBits */ Format.NOT_SPECIFIED,
+                                /* frameRate */ Format.NOT_SPECIFIED,
+                                Format.shortArray),
+                        new AudioFormat(
+                                AudioFormat.LINEAR,
+                                /* sampleRate */ Format.NOT_SPECIFIED,
                                 16,
-                                Format.NOT_SPECIFIED,
+                                1,
+                                AbstractAudioRenderer
+                                    .NATIVE_AUDIO_FORMAT_ENDIAN,
+                                AudioFormat.SIGNED,
+                                /* frameSizeInBits */ Format.NOT_SPECIFIED,
+                                /* frameRate */ Format.NOT_SPECIFIED,
                                 Format.byteArray)
                     };
     }
@@ -171,14 +183,14 @@ public class AudioLevelEffect
     /**
      * Performs the media processing defined by this codec.
      *
-     * @param inputBuffer The <tt>Buffer</tt> that contains the media data to be
+     * @param inBuffer The <tt>Buffer</tt> that contains the media data to be
      * processed.
-     * @param outputBuffer The <tt>Buffer</tt> in which to store the processed
+     * @param outBuffer The <tt>Buffer</tt> in which to store the processed
      * media data.
      * @return <tt>BUFFER_PROCESSED_OK</tt> if the processing is successful.
      * @see PlugIn
      */
-    public int process(Buffer inputBuffer, Buffer outputBuffer)
+    public int process(Buffer inBuffer, Buffer outBuffer)
     {
         /*
          * In accord with what an Effect is generally supposed to do, copy the
@@ -187,41 +199,49 @@ public class AudioLevelEffect
         if (COPY_DATA_FROM_INPUT_TO_OUTPUT)
         {
             // Copy the actual data from the input to the output.
-            Object data = outputBuffer.getData();
-            int inputBufferLength = inputBuffer.getLength();
-            byte[] bufferData;
+            Object inData = inBuffer.getData();
+            Object outData = outBuffer.getData();
+            int length = inBuffer.getLength();
 
-            if ((data instanceof byte[]) &&
-                    (((byte[])data).length >= inputBufferLength))
+            if (inData instanceof short[])
             {
-                bufferData = (byte[])data;
+                if (!(outData instanceof short[])
+                        || (((short[]) outData).length < length))
+                {
+                    outData = new short[length];
+                    outBuffer.setData(outData);
+                }
             }
-            else
+            else if (inData instanceof byte[])
             {
-                bufferData = new byte[inputBufferLength];
-                outputBuffer.setData(bufferData);
+                if (!(outData instanceof byte[])
+                        || (((byte[]) outData).length < length))
+                {
+                    outData = new byte[length];
+                    outBuffer.setData(outData);
+                }
             }
-            outputBuffer.setLength(inputBufferLength);
-            outputBuffer.setOffset(0);
+            outBuffer.setLength(length);
+            outBuffer.setOffset(0);
 
             System.arraycopy(
-                inputBuffer.getData(), inputBuffer.getOffset(),
-                bufferData, 0,
-                inputBufferLength);
+                    inData, inBuffer.getOffset(),
+                    outData, 0,
+                    length);
 
             // Now copy the remaining attributes.
-            outputBuffer.setFormat(inputBuffer.getFormat());
-            outputBuffer.setHeader(inputBuffer.getHeader());
-            outputBuffer.setSequenceNumber(inputBuffer.getSequenceNumber());
-            outputBuffer.setTimeStamp(inputBuffer.getTimeStamp());
-            outputBuffer.setFlags(inputBuffer.getFlags());
-            outputBuffer.setDiscard(inputBuffer.isDiscard());
-            outputBuffer.setEOM(inputBuffer.isEOM());
-            outputBuffer.setDuration(inputBuffer.getDuration());
+            outBuffer.setDiscard(inBuffer.isDiscard());
+            outBuffer.setDuration(inBuffer.getDuration());
+            outBuffer.setEOM(inBuffer.isEOM());
+            outBuffer.setFlags(inBuffer.getFlags());
+            outBuffer.setFormat(inBuffer.getFormat());
+            outBuffer.setHeader(inBuffer.getHeader());
+            outBuffer.setSequenceNumber(inBuffer.getSequenceNumber());
+            outBuffer.setTimeStamp(inBuffer.getTimeStamp());
         }
         else
         {
-            outputBuffer.copy(inputBuffer);
+            outBuffer.copy(inBuffer);
         }
 
         /*
@@ -229,7 +249,7 @@ public class AudioLevelEffect
          * deliver the data to eventDispatcher so that its audio level gets
          * calculated and delivered to audioEventListener.
          */
-        eventDispatcher.addData(outputBuffer);
+        eventDispatcher.addData(outBuffer);
 
         return BUFFER_PROCESSED_OK;
     }

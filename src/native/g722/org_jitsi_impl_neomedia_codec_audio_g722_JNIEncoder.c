@@ -12,7 +12,7 @@
 
 JNIEXPORT void JNICALL
 Java_org_jitsi_impl_neomedia_codec_audio_g722_JNIEncoder_g722_1encoder_1close
-    (JNIEnv *jniEnv, jclass clazz, jlong encoder)
+    (JNIEnv *env, jclass clazz, jlong encoder)
 {
     g722_encode_state_t *e = (g722_encode_state_t *) (intptr_t) encoder;
 
@@ -22,37 +22,33 @@ Java_org_jitsi_impl_neomedia_codec_audio_g722_JNIEncoder_g722_1encoder_1close
 
 JNIEXPORT jlong JNICALL
 Java_org_jitsi_impl_neomedia_codec_audio_g722_JNIEncoder_g722_1encoder_1open
-    (JNIEnv *jniEnv, jclass clazz)
+    (JNIEnv *env, jclass clazz)
 {
     return (jlong) (intptr_t) g722_encode_init(NULL, 64000, 0);
 }
 
 JNIEXPORT void JNICALL
 Java_org_jitsi_impl_neomedia_codec_audio_g722_JNIEncoder_g722_1encoder_1process
-    (JNIEnv *jniEnv, jclass clazz,
-    jlong encoder,
-    jbyteArray input, jint inputOffset,
-    jbyteArray output, jint outputOffset, jint outputLength)
+    (JNIEnv *env, jclass clazz,
+        jlong encoder,
+        jshortArray in, jint inOffset,
+        jbyteArray out, jint outOffset, jint outLength)
 {
-    jbyte *outputPtr = (*jniEnv)->GetByteArrayElements(jniEnv, output, NULL);
+    jbyte *out_ = (*env)->GetPrimitiveArrayCritical(env, out, NULL);
 
-    if (outputPtr)
+    if (out_)
     {
-        jbyte *inputPtr
-            = (*jniEnv)->GetPrimitiveArrayCritical(jniEnv, input, NULL);
+        jshort *in_ = (*env)->GetPrimitiveArrayCritical(env, in, NULL);
 
-        if (inputPtr)
+        if (in_)
         {
             g722_encode(
                     (g722_encode_state_t *) (intptr_t) encoder,
-                    (uint8_t *) (outputPtr + outputOffset),
-                    (const int16_t *) (inputPtr + inputOffset),
-                    2 * (outputLength / sizeof(uint8_t)));
-            (*jniEnv)->ReleasePrimitiveArrayCritical(
-                    jniEnv,
-                    input, inputPtr,
-                    JNI_ABORT);
+                    (uint8_t *) (out_ + outOffset),
+                    (const int16_t *) (in_ + inOffset),
+                    2 * outLength);
+            (*env)->ReleasePrimitiveArrayCritical(env, in, in_, JNI_ABORT);
         }
-        (*jniEnv)->ReleaseByteArrayElements(jniEnv, output, outputPtr, 0);
+        (*env)->ReleasePrimitiveArrayCritical(env, out, out_, 0);
     }
 }

@@ -174,14 +174,6 @@ class AudioMixerPushBufferStream
         = Logger.getLogger(AudioMixerPushBufferStream.class);
 
     /**
-     * The number of reads from an input stream with no returned samples which
-     * do not get reported in tracing output. Once the number of such reads from
-     * an input stream exceeds this limit, it gets reported and the counting is
-     * restarted.
-     */
-    static final long TRACE_NON_CONTRIBUTING_READ_COUNT = 0;
-
-    /**
      * The <tt>AudioMixer</tt> which created this
      * <tt>AudioMixerPushBufferStream</tt>.
      */
@@ -207,12 +199,6 @@ class AudioMixerPushBufferStream
      * purposes of reducing garbage collection.
      */
     private final ShortArrayCache shortArrayCache = new ShortArrayCache();
-
-    /**
-     * The <tt>AudioFormat</tt> of the <tt>Buffer</tt> read during the last read
-     * from one of the {@link #inStreams}. Only used for debugging purposes.
-     */
-    private AudioFormat lastReadInFormat;
 
     /**
      * The <tt>AudioFormat</tt> of the data this instance outputs.
@@ -549,11 +535,13 @@ class AudioMixerPushBufferStream
                     if (inSampleDescInStreams.length == inStreamCount)
                     {
                         for (int i = 0; i < inStreamCount; i++)
+                        {
                             if (inSampleDescInStreams[i] != inStreams[i])
                             {
                                 inSampleDesc = null;
                                 break;
                             }
+                        }
                     }
                     else
                         inSampleDesc = null;
@@ -675,30 +663,13 @@ class AudioMixerPushBufferStream
     {
         PushBufferStream inStream
             = (PushBufferStream) inStreamDesc.getInStream();
-        AudioFormat inStreamFormat = (AudioFormat) inStream.getFormat();
         Buffer inBuffer = inStreamDesc.getBuffer(true);
+        AudioFormat inStreamFormat = (AudioFormat) inStream.getFormat();
 
         if (sampleCount != 0)
-        {
-            if (Format.byteArray.equals(inStreamFormat.getDataType()))
-            {
-                Object data = inBuffer.getData();
-                int length
-                    = sampleCount * (inStreamFormat.getSampleSizeInBits() / 8);
-
-                if (!(data instanceof byte[])
-                        || (((byte[]) data).length != length))
-                    inBuffer.setData(new byte[length]);
-                inBuffer.setLength(0);
-                inBuffer.setOffset(0);
-            }
-            else
-            {
-                throw new UnsupportedFormatException(
-                        "!Format.getDataType().equals(byte[].class)",
-                        inStreamFormat);
-            }
-        }
+            validatePrimitiveArraySize(inBuffer, sampleCount, inStreamFormat);
+        inBuffer.setLength(0);
+        inBuffer.setOffset(0);
 
         audioMixer.read(
                 inStream,
@@ -723,23 +694,18 @@ class AudioMixerPushBufferStream
             return;
         }
 
+        Object inData = inBuffer.getData();
+
+        if (inData == null)
+        {
+            outBuffer.setDiscard(true);
+            return;
+        }
+
         AudioFormat inFormat = (AudioFormat) inBuffer.getFormat();
 
         if (inFormat == null)
             inFormat = inStreamFormat;
-
-        if (logger.isTraceEnabled())
-        {
-            if (lastReadInFormat == null)
-                lastReadInFormat = inFormat;
-            else if (!lastReadInFormat.matches(inFormat))
-            {
-                lastReadInFormat = inFormat;
-                logger.trace(
-                        "Read inSamples in different format "
-                            + lastReadInFormat);
-            }
-        }
 
         int inFormatSigned = inFormat.getSigned();
 
@@ -760,7 +726,7 @@ class AudioMixerPushBufferStream
         {
             logger.error(
                     "Read inFormat with channels " + inChannels
-                        + " while expected outFormat channels is "
+                        + " while expected outFormat with channels "
                         + outChannels);
             throw new UnsupportedFormatException(
                     "AudioFormat.getChannels()",
@@ -779,29 +745,53 @@ class AudioMixerPushBufferStream
                         + outSampleRate);
         }
 
-        Object inData = inBuffer.getData();
+        int inSampleSizeInBits = inFormat.getSampleSizeInBits();
+        int outSampleSizeInBits = outFormat.getSampleSizeInBits();
+        int outLength;
 
-        if (inData == null)
+        if (inData instanceof short[])
         {
-            outBuffer.setDiscard(true);
+            short[] outSamples;
+
+            switch (inSampleSizeInBits)
+            {
+            case 16:
+                outLength = inLength;
+                outSamples
+                    = shortArrayCache.validateShortArraySize(
+                            outBuffer,
+                            outLength);
+                switch (outSampleSizeInBits)
+                {
+                case 16:
+                    System.arraycopy(
+                            inData, inBuffer.getOffset(),
+                            outSamples, 0,
+                            outLength);
+                    break;
+                case 8:
+                case 24:
+                case 32:
+                default:
+                    throw new UnsupportedFormatException(
+                            "AudioFormat.getSampleSizeInBits()",
+                            outFormat);
+                }
+                break;
+            case 8:
+            case 24:
+            case 32:
+            default:
+                throw new UnsupportedFormatException(
+                        "AudioFormat.getSampleSizeInBits()",
+                        inFormat);
+            }
+            // TODO Auto-generated method stub
+            outLength = 0;
         }
         else if (inData instanceof byte[])
         {
-            int inSampleSizeInBits = inFormat.getSampleSizeInBits();
-            int outSampleSizeInBits = outFormat.getSampleSizeInBits();
-
-            if (logger.isTraceEnabled()
-                    && (inSampleSizeInBits != outSampleSizeInBits))
-            {
-                logger.trace(
-                        "Read inFormat with sampleSizeInBits "
-                            + inSampleSizeInBits
-                            + ". Will convert to sampleSizeInBits "
-                            + outSampleSizeInBits);
-            }
-
             byte[] inSamples = (byte[]) inData;
-            int outLength;
             short[] outSamples;
 
             switch (inSampleSizeInBits)
@@ -838,19 +828,20 @@ class AudioMixerPushBufferStream
                         "AudioFormat.getSampleSizeInBits()",
                         inFormat);
             }
-
-            outBuffer.setFlags(inBuffer.getFlags());
-            outBuffer.setFormat(outFormat);
-            outBuffer.setLength(outLength);
-            outBuffer.setOffset(0);
-            outBuffer.setTimeStamp(inBuffer.getTimeStamp());
         }
         else
         {
             throw new UnsupportedFormatException(
-                    "Format.getDataType().equals(" + inData.getClass() + ")",
+                    "The dataType of the AudioFormat of the PushBufferStream"
+                        + " must be either byte[].class or short[].class!",
                     inFormat);
         }
+
+        outBuffer.setFlags(inBuffer.getFlags());
+        outBuffer.setFormat(outFormat);
+        outBuffer.setLength(outLength);
+        outBuffer.setOffset(0);
+        outBuffer.setTimeStamp(inBuffer.getTimeStamp());
     }
 
     /**
@@ -916,12 +907,7 @@ class AudioMixerPushBufferStream
                     }
                 }
 
-                if (sampleCount == 0)
-                {
-                    if (TRACE_NON_CONTRIBUTING_READ_COUNT > 0)
-                        inStreamDesc.incrementNonContributingReadCount(logger);
-                }
-                else
+                if (sampleCount != 0)
                 {
                     /*
                      * The int array with the samples will be used via
@@ -1316,6 +1302,45 @@ class AudioMixerPushBufferStream
         {
             shortArrayCache.deallocateShortArray(inSamples[i]);
             inSamples[i] = null;
+        }
+    }
+
+    private void validatePrimitiveArraySize(
+            Buffer buf,
+            int sampleCount,
+            AudioFormat af)
+        throws UnsupportedFormatException
+    {
+        Class<?> dataType = af.getDataType();
+
+        if (Format.shortArray.equals(dataType))
+        {
+            Object data = buf.getData();
+            int length = sampleCount * (af.getSampleSizeInBits() / 8) / 2;
+
+            if (!(data instanceof short[])
+                    || (((short[]) data).length != length))
+            {
+                buf.setData(new short[length]);
+            }
+        }
+        else if (Format.byteArray.equals(dataType))
+        {
+            Object data = buf.getData();
+            int length = sampleCount * (af.getSampleSizeInBits() / 8);
+
+            if (!(data instanceof byte[])
+                    || (((byte[]) data).length != length))
+            {
+                buf.setData(new byte[length]);
+            }
+        }
+        else
+        {
+            throw new UnsupportedFormatException(
+                    "The dataType of AudioFormat must be either byte[].class or"
+                        + " short[].class!",
+                    af);
         }
     }
 }

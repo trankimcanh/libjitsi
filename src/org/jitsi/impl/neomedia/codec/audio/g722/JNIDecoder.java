@@ -4,12 +4,13 @@
  * Distributable under LGPL license.
  * See terms of license at gnu.org.
  */
-package net.java.sip.communicator.impl.neomedia.codec.audio.g722;
+package org.jitsi.impl.neomedia.codec.audio.g722;
 
 import javax.media.*;
 import javax.media.format.*;
 
 import org.jitsi.impl.neomedia.codec.*;
+import org.jitsi.impl.neomedia.jmfext.media.renderer.audio.*;
 import org.jitsi.service.neomedia.codec.*;
 
 /**
@@ -37,11 +38,11 @@ public class JNIDecoder
                             16000,
                             16,
                             1,
-                            AudioFormat.LITTLE_ENDIAN,
+                            AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN,
                             AudioFormat.SIGNED,
                             Format.NOT_SPECIFIED /* frameSizeInBits */,
                             Format.NOT_SPECIFIED /* frameRate */,
-                            Format.byteArray)
+                            Format.shortArray)
                 };
 
     static
@@ -55,8 +56,8 @@ public class JNIDecoder
 
     private static native void g722_decoder_process(
             long decoder,
-            byte[] input, int inputOffset,
-            byte[] output, int outputOffset, int outputLength);
+            byte[] in, int inOffset,
+            short[] out, int outOffset, int outLength);
 
     private long decoder;
 
@@ -96,34 +97,27 @@ public class JNIDecoder
 
     /**
      *
-     * @param inputBuffer
-     * @param outputBuffer
+     * @param inBuffer
+     * @param outBuffer
      * @return
      * @see AbstractCodecExt#doProcess(Buffer, Buffer)
      */
     @Override
-    protected int doProcess(Buffer inputBuffer, Buffer outputBuffer)
+    protected int doProcess(Buffer inBuffer, Buffer outBuffer)
     {
-        byte[] input = (byte[]) inputBuffer.getData();
-
-        int outputOffset = outputBuffer.getOffset();
-        int outputLength = inputBuffer.getLength() * 4;
-        byte[] output
-            = validateByteArraySize(
-                    outputBuffer,
-                    outputOffset + outputLength,
-                    true);
+        byte[] in = (byte[]) inBuffer.getData();
+        int outLength = inBuffer.getLength() * 2;
+        short[] out = validateShortArraySize(outBuffer, outLength, false);
 
         g722_decoder_process(
                 decoder,
-                input, inputBuffer.getOffset(),
-                output, outputOffset, outputLength);
+                in, inBuffer.getOffset(),
+                out, 0, outLength);
 
-        outputBuffer.setDuration(
-                (outputLength * 1000000L)
-                    / (16L /* kHz */ * 2L /* sampleSizeInBits / 8 */));
-        outputBuffer.setFormat(getOutputFormat());
-        outputBuffer.setLength(outputLength);
+        outBuffer.setDuration(outLength * 1000000L / 16L /* kHz */);
+        outBuffer.setFormat(getOutputFormat());
+        outBuffer.setLength(outLength);
+
         return BUFFER_PROCESSED_OK;
     }
 }

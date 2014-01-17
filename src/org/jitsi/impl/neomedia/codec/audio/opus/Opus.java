@@ -16,6 +16,11 @@ package org.jitsi.impl.neomedia.codec.audio.opus;
 public class Opus
 {
     /**
+     * Constant used to set various settings to "automatic".
+     */
+    public static final int AUTO = -1000;
+
+    /**
      * Opus fullband constant
      */
     public static final int BANDWIDTH_FULLBAND = 1105;
@@ -50,17 +55,12 @@ public class Opus
      * packets with a single frame, that's a 1 byte TOC + the maximum frame size.
      * See http://tools.ietf.org/html/rfc6716#section-3.2
      */
-    public static final int MAX_PACKET = 1+1275;
+    public static final int MAX_PACKET = 1 + 1275;
 
     /**
-     * Constant used to set various settings to "automatic"
+     * Constant usually indicating that no error occurred.
      */
-    public static final int OPUS_AUTO = -1000;
-
-    /**
-     * Constant usually indicating that no error occurred
-     */
-    public static final int OPUS_OK = 0;
+    public static final int OK = 0;
 
     /**
      * Loads the native JNI library.
@@ -78,38 +78,36 @@ public class Opus
      */
     public static void assertOpusIsFunctional()
     {
-        int channels = 1;
-
-        decoder_get_size(channels);
-        encoder_get_size(channels);
+        decoder_get_size(1);
+        encoder_get_size(1);
     }
 
     /**
-     * Decodes an opus packet from <tt>input</tt> into <tt>output</tt>.
+     * Decodes an Opus packet from <tt>in</tt> into <tt>out</tt>.
      *
      * @param decoder the <tt>OpusDecoder</tt> state to perform the decoding
-     * @param input an array of <tt>byte</tt>s which represents the input
-     * payload to decode. If <tt>null</tt>, indicates packet loss.
-     * @param inputOffset the offset in <tt>input</tt> at which the payload to
-     * be decoded begins
-     * @param inputLength the length in bytes in <tt>input</tt> beginning at
-     * <tt>inputOffset</tt> of the payload to be decoded
-     * @param output an array of <tt>byte</tt>s into which the decoded signal is
+     * @param in an array of <tt>byte</tt>s which represents the input payload
+     * to decode. If <tt>null</tt>, indicates packet loss.
+     * @param inOffset the offset in <tt>in</tt> at which the payload to be
+     * decoded begins
+     * @param inLength the length in bytes in <tt>in</tt> beginning at
+     * <tt>inOffset</tt> of the payload to be decoded
+     * @param out an array of <tt>short</tt>s into which the decoded signal is
      * to be output
-     * @param outputOffset the offset in <tt>output</tt> at which the output of
-     * the decoded signal is to begin
-     * @param outputFrameSize the number of samples per channel <tt>output</tt>
-     * beginning at <tt>outputOffset</tt> of the maximum space available for
-     * output of the decoded signal
-     * @param decodeFEC 0 to decode the packet normally, 1 to decode the FEC
-     * data in the packet
-     * @return the number of decoded samples written into <tt>output</tt>
-     * (beginning at <tt>outputOffset</tt>)
+     * @param outOffset the offset in <tt>out</tt> at which the output of the
+     * decoded signal is to begin
+     * @param outFrameSize the number of samples per channel <tt>out</tt>
+     * beginning at <tt>outOffset</tt> of the maximum space available for output
+     * of the decoded signal
+     * @param decodeFEC <tt>0</tt> to decode the packet normally, <tt>1</tt> to
+     * decode the FEC data in the packet
+     * @return the number of decoded samples written into <tt>out</tt>
+     * (beginning at <tt>outOffset</tt>)
      */
     public static native int decode(
             long decoder,
-            byte[] input, int inputOffset, int inputLength,
-            byte[] output, int outputOffset, int outputFrameSize,
+            byte[] in, int inOffset, int inLength,
+            short[] out, int outOffset, int outFrameSize,
             int decodeFEC);
 
     /**
@@ -153,24 +151,23 @@ public class Opus
     public static native int decoder_get_size(int channels);
 
     /**
-     * Encodes the input from <tt>input</tt> into an opus packet in
-     * <tt>output</tt>.
+     * Encodes the input from <tt>in</tt> into an Opus packet in <tt>out</tt>.
      *
      * @param encoder The encoder to use.
-     * @param input Array containing PCM encoded input.
-     * @param inputOffset Offset to use into the <tt>input</tt> array
-     * @param inputFrameSize The number of samples per channel in <tt>input</tt>.
-     * @param output Array where the encoded packet will be stored.
-     * @param outputOffset
-     * @param outputLength The number of available bytes in <tt>output</tt>.
+     * @param in Array containing PCM encoded input.
+     * @param inOffset Offset to use into the <tt>in</tt> array
+     * @param inFrameSize The number of samples per channel in <tt>in</tt>.
+     * @param out Array where the encoded packet will be stored.
+     * @param outOffset
+     * @param outLength The number of available bytes in <tt>out</tt>.
      *
-     * @return The number of bytes written in <tt>output</tt>, or a negative
-     * on error.
+     * @return The number of bytes written in <tt>out</tt>, or a negative on
+     * error.
      */
     public static native int encode(
             long encoder,
-            byte[] input, int inputOffset, int inputFrameSize,
-            byte[] output, int outputOffset, int outputLength);
+            short[] in, int inOffset, int inFrameSize,
+            byte[] out, int outOffset, int outLength);
 
     /**
      * Creates an OpusEncoder structure, returns a pointer to it casted to long.
@@ -222,6 +219,16 @@ public class Opus
     public static native int encoder_get_dtx(long encoder);
 
     /**
+     * Wrapper around the native <tt>opus_encoder_ctl</tt> function. Returns
+     * the current inband FEC encoder setting.
+     *
+     * @param encoder The encoder to use
+     *
+     * @return the current inband FEC encoder setting.
+     */
+    public static native int encoder_get_inband_fec(long encoder);
+
+    /**
      * Returns the size in bytes required for an OpusEncoder structure.
      *
      * @param channels number of channels (1/2)
@@ -249,16 +256,6 @@ public class Opus
      * @return the current VBR constraint encoder setting.
      */
     public static native int encoder_get_vbr_constraint(long encoder);
-
-    /**
-     * Wrapper around the native <tt>opus_encoder_ctl</tt> function. Returns
-     * the current inband FEC encoder setting.
-     *
-     * @param encoder The encoder to use
-     *
-     * @return the current inband FEC encoder setting.
-     */
-    public static native int encoder_get_inband_fec(long encoder);
 
     /**
      * Wrapper around the native <tt>opus_encoder_ctl</tt> function. Sets the

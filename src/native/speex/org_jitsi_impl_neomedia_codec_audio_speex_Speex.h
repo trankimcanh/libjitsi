@@ -9,178 +9,178 @@ extern "C" {
 #endif
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_bits_destroy
+ * Method:    bits_destroy
  * Signature: (J)V
  */
-JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1destroy
+JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1destroy
   (JNIEnv *, jclass, jlong);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_bits_init
+ * Method:    bits_init
  * Signature: ()J
  */
-JNIEXPORT jlong JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1init
+JNIEXPORT jlong JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1init
   (JNIEnv *, jclass);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_bits_nbytes
+ * Method:    bits_nbytes
  * Signature: (J)I
  */
-JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1nbytes
+JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1nbytes
   (JNIEnv *, jclass, jlong);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_bits_read_from
+ * Method:    bits_read_from
  * Signature: (J[BII)V
  */
-JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1read_1from
+JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1read_1from
   (JNIEnv *, jclass, jlong, jbyteArray, jint, jint);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_bits_remaining
+ * Method:    bits_remaining
  * Signature: (J)I
  */
-JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1remaining
+JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1remaining
   (JNIEnv *, jclass, jlong);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_bits_reset
+ * Method:    bits_reset
  * Signature: (J)V
  */
-JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1reset
+JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1reset
   (JNIEnv *, jclass, jlong);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_bits_write
+ * Method:    bits_write
  * Signature: (J[BII)I
  */
-JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1write
+JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1write
   (JNIEnv *, jclass, jlong, jbyteArray, jint, jint);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_decode_int
- * Signature: (JJ[BI)I
+ * Method:    decode_int
+ * Signature: (JJ[SI)I
  */
-JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decode_1int
-  (JNIEnv *, jclass, jlong, jlong, jbyteArray, jint);
+JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_decode_1int
+  (JNIEnv *, jclass, jlong, jlong, jshortArray, jint);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_decoder_ctl
+ * Method:    decoder_ctl
  * Signature: (JI)I
  */
-JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decoder_1ctl__JI
+JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_decoder_1ctl__JI
   (JNIEnv *, jclass, jlong, jint);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_decoder_ctl
+ * Method:    decoder_ctl
  * Signature: (JII)I
  */
-JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decoder_1ctl__JII
+JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_decoder_1ctl__JII
   (JNIEnv *, jclass, jlong, jint, jint);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_decoder_destroy
+ * Method:    decoder_destroy
  * Signature: (J)V
  */
-JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decoder_1destroy
+JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_decoder_1destroy
   (JNIEnv *, jclass, jlong);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_decoder_init
+ * Method:    decoder_init
  * Signature: (J)J
  */
-JNIEXPORT jlong JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decoder_1init
+JNIEXPORT jlong JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_decoder_1init
   (JNIEnv *, jclass, jlong);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_encode_int
- * Signature: (J[BIJ)I
+ * Method:    encode_int
+ * Signature: (J[SIJ)I
  */
-JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encode_1int
-  (JNIEnv *, jclass, jlong, jbyteArray, jint, jlong);
+JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_encode_1int
+  (JNIEnv *, jclass, jlong, jshortArray, jint, jlong);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_encoder_ctl
+ * Method:    encoder_ctl
  * Signature: (JI)I
  */
-JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encoder_1ctl__JI
+JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_encoder_1ctl__JI
   (JNIEnv *, jclass, jlong, jint);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_encoder_ctl
+ * Method:    encoder_ctl
  * Signature: (JII)I
  */
-JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encoder_1ctl__JII
+JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_encoder_1ctl__JII
   (JNIEnv *, jclass, jlong, jint, jint);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_encoder_destroy
+ * Method:    encoder_destroy
  * Signature: (J)V
  */
-JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encoder_1destroy
+JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_encoder_1destroy
   (JNIEnv *, jclass, jlong);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_encoder_init
+ * Method:    encoder_init
  * Signature: (J)J
  */
-JNIEXPORT jlong JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encoder_1init
+JNIEXPORT jlong JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_encoder_1init
   (JNIEnv *, jclass, jlong);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_lib_get_mode
+ * Method:    lib_get_mode
  * Signature: (I)J
  */
-JNIEXPORT jlong JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1lib_1get_1mode
+JNIEXPORT jlong JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_lib_1get_1mode
   (JNIEnv *, jclass, jint);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_resampler_destroy
+ * Method:    resampler_destroy
  * Signature: (J)V
  */
-JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1resampler_1destroy
+JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_resampler_1destroy
   (JNIEnv *, jclass, jlong);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_resampler_init
+ * Method:    resampler_init
  * Signature: (IIIIJ)J
  */
-JNIEXPORT jlong JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1resampler_1init
+JNIEXPORT jlong JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_resampler_1init
   (JNIEnv *, jclass, jint, jint, jint, jint, jlong);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_resampler_process_interleaved_int
- * Signature: (J[BII[BII)I
+ * Method:    resampler_process_interleaved_int
+ * Signature: (JLjava/lang/Object;IILjava/lang/Object;II)I
  */
-JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1resampler_1process_1interleaved_1int
-  (JNIEnv *, jclass, jlong, jbyteArray, jint, jint, jbyteArray, jint, jint);
+JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_resampler_1process_1interleaved_1int
+  (JNIEnv *, jclass, jlong, jobject, jint, jint, jobject, jint, jint);
 
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_speex_Speex
- * Method:    speex_resampler_set_rate
+ * Method:    resampler_set_rate
  * Signature: (JII)I
  */
-JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1resampler_1set_1rate
+JNIEXPORT jint JNICALL Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_resampler_1set_1rate
   (JNIEnv *, jclass, jlong, jint, jint);
 
 #ifdef __cplusplus

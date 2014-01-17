@@ -12,51 +12,46 @@
 
 JNIEXPORT jint JNICALL
 Java_org_jitsi_impl_neomedia_codec_audio_opus_Opus_decode
-    (JNIEnv *env, jclass clazz, jlong decoder, jbyteArray input,
-        jint inputOffset, jint inputLength, jbyteArray output,
-        jint outputOffset, jint outputFrameSize, jint decodeFEC)
+    (JNIEnv *env, jclass clazz, jlong decoder, jbyteArray in, jint inOffset,
+        jint inLength, jshortArray out, jint outOffset, jint outFrameSize,
+        jint decodeFEC)
 {
     int ret;
 
-    if (output)
+    if (out)
     {
-        jbyte *input_;
+        jbyte *in_;
 
-        if (input && inputLength)
+        if (in && inLength)
         {
-            input_ = (*env)->GetPrimitiveArrayCritical(env, input, 0);
-            ret = input_ ? OPUS_OK : OPUS_ALLOC_FAIL;
+            in_ = (*env)->GetPrimitiveArrayCritical(env, in, 0);
+            ret = in_ ? OPUS_OK : OPUS_ALLOC_FAIL;
         }
         else
         {
-            input_ = 0;
+            in_ = 0;
             ret = OPUS_OK;
         }
         if (OPUS_OK == ret)
         {
-            jbyte *output_ = (*env)->GetPrimitiveArrayCritical(env, output, 0);
+            jshort *out_ = (*env)->GetPrimitiveArrayCritical(env, out, 0);
 
-            if (output_)
+            if (out_)
             {
                 ret
                     = opus_decode(
                             (OpusDecoder *) (intptr_t) decoder,
-                            (unsigned char *)
-                                (input_ ? (input_ + inputOffset) : NULL),
-                            inputLength,
-                            (opus_int16 *) (output_ + outputOffset),
-                            outputFrameSize,
+                            (unsigned char *) (in_ ? (in_ + inOffset) : NULL),
+                            inLength,
+                            (opus_int16 *) (out_ + outOffset),
+                            outFrameSize,
                             decodeFEC);
-                (*env)->ReleasePrimitiveArrayCritical(env, output, output_, 0);
+                (*env)->ReleasePrimitiveArrayCritical(env, out, out_, 0);
             }
             else
                 ret = OPUS_ALLOC_FAIL;
-            if (input_)
-            {
-                (*env)->ReleasePrimitiveArrayCritical(
-                        env,
-                        input, input_, JNI_ABORT);
-            }
+            if (in_)
+                (*env)->ReleasePrimitiveArrayCritical(env, in, in_, JNI_ABORT);
         }
     }
     else
@@ -122,36 +117,33 @@ Java_org_jitsi_impl_neomedia_codec_audio_opus_Opus_decoder_1get_1size
 
 JNIEXPORT jint JNICALL
 Java_org_jitsi_impl_neomedia_codec_audio_opus_Opus_encode
-    (JNIEnv *env, jclass clazz, jlong encoder, jbyteArray input,
-        jint inputOffset, jint inputFrameSize, jbyteArray output,
-        jint outputOffset, jint outputLength)
+    (JNIEnv *env, jclass clazz, jlong encoder, jshortArray in, jint inOffset,
+        jint inFrameSize, jbyteArray out, jint outOffset, jint outLength)
 {
     int ret;
 
-    if (input && output)
+    if (in && out)
     {
-        jbyte *input_ = (*env)->GetPrimitiveArrayCritical(env, input, 0);
+        jshort *in_ = (*env)->GetPrimitiveArrayCritical(env, in, 0);
 
-        if (input_)
+        if (in_)
         {
-            jbyte *output_ = (*env)->GetPrimitiveArrayCritical(env, output, 0);
+            jbyte *out_ = (*env)->GetPrimitiveArrayCritical(env, out, 0);
 
-            if (output_)
+            if (out_)
             {
                 ret
                     = opus_encode(
                             (OpusEncoder *) (intptr_t) encoder,
-                            (opus_int16 *) (input_ + inputOffset),
-                            inputFrameSize,
-                            (unsigned char *) (output_ + outputOffset),
-                            outputLength);
-                (*env)->ReleasePrimitiveArrayCritical(env, output, output_, 0);
+                            (opus_int16 *) (in_ + inOffset),
+                            inFrameSize,
+                            (unsigned char *) (out_ + outOffset),
+                            outLength);
+                (*env)->ReleasePrimitiveArrayCritical(env, out, out_, 0);
             }
             else
                 ret = OPUS_ALLOC_FAIL;
-            (*env)->ReleasePrimitiveArrayCritical(
-                    env,
-                    input, input_, JNI_ABORT);
+            (*env)->ReleasePrimitiveArrayCritical(env, in, in_, JNI_ABORT);
         }
         else
             ret = OPUS_ALLOC_FAIL;
@@ -221,6 +213,19 @@ Java_org_jitsi_impl_neomedia_codec_audio_opus_Opus_encoder_1get_1dtx
 }
 
 JNIEXPORT jint JNICALL
+Java_org_jitsi_impl_neomedia_codec_audio_opus_Opus_encoder_1get_1inband_1fec
+    (JNIEnv *env, jclass clazz, jlong encoder)
+{
+    opus_int32 x;
+    int ret
+        = opus_encoder_ctl(
+                (OpusEncoder *) (intptr_t)encoder,
+                OPUS_GET_INBAND_FEC(&x));
+
+    return (OPUS_OK == ret) ? x : ret;
+}
+
+JNIEXPORT jint JNICALL
 Java_org_jitsi_impl_neomedia_codec_audio_opus_Opus_encoder_1get_1size
     (JNIEnv *enc, jclass clazz, jint channels)
 {
@@ -249,19 +254,6 @@ Java_org_jitsi_impl_neomedia_codec_audio_opus_Opus_encoder_1get_1vbr_1constraint
         = opus_encoder_ctl(
                 (OpusEncoder *) (intptr_t) encoder,
                 OPUS_GET_VBR_CONSTRAINT(&x));
-
-    return (OPUS_OK == ret) ? x : ret;
-}
-
-JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_opus_Opus_encoder_1get_1inband_1fec
-    (JNIEnv *env, jclass clazz, jlong encoder)
-{
-    opus_int32 x;
-    int ret
-        = opus_encoder_ctl(
-                (OpusEncoder *) (intptr_t) encoder,
-                OPUS_GET_INBAND_FEC(&x));
 
     return (OPUS_OK == ret) ? x : ret;
 }

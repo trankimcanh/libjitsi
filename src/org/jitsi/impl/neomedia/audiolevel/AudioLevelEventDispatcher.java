@@ -30,11 +30,22 @@ import org.jitsi.service.neomedia.event.*;
 public class AudioLevelEventDispatcher
 {
     /**
-     * The interval of time in milliseconds which the Thread of
-     * AudioLevelEventDispatcher is to idly wait for data to be provided for
-     * audio level calculation before it exits.
+     * The interval of time in milliseconds which the <tt>Thread</tt> of
+     * <tt>AudioLevelEventDispatcher</tt> is to idly wait for data to be
+     * provided for audio level calculation before it exits.
      */
     private static final long IDLE_TIMEOUT = 30 * 1000;
+
+    /**
+     * The audio samples provided to this instance as a <tt>byte</tt> array to
+     * measure the audio levels of.
+     */
+    private byte[] bytes;
+
+    /**
+     * The length of the audio samples in {@link #bytes}.
+     */
+    private int bytesLength = 0;
 
     /**
      * The <tt>AudioLevelMap</tt> in which the audio calculations run by this
@@ -42,16 +53,6 @@ public class AudioLevelEventDispatcher
      * dispatching them to {@link #listener}.
      */
     private AudioLevelMap cache = null;
-
-    /**
-     * The data to process.
-     */
-    private byte[] data = null;
-
-    /**
-     * The length of the data last recorded in the <tt>data</tt> array.
-     */
-    private int dataLength = 0;
 
     /**
      * This is the last level we fired.
@@ -62,6 +63,17 @@ public class AudioLevelEventDispatcher
      * The listener which is interested in audio level changes.
      */
     private SimpleAudioLevelListener listener;
+
+    /**
+     * The audio samples provided to this instance as a <tt>short</tt> array to
+     * measure the audio levels of.
+     */
+    private short[] shorts;
+
+    /**
+     * The length of the audio samples in {@link #bytes}.
+     */
+    private int shortsLength = 0;
 
     /**
      * The SSRC of the stream we are measuring that we should use as a key for
@@ -95,6 +107,62 @@ public class AudioLevelEventDispatcher
     }
 
     /**
+     * Adds data to be processed.
+     *
+     * @param buffer the data that we'd like to queue for processing.
+     */
+    public synchronized void addData(Buffer buffer)
+    {
+        /*
+         * If no one is interested in the audio level, do not even add the
+         * Buffer data.
+         */
+        if ((listener == null) && ((cache == null) || (ssrc == -1)))
+            return;
+
+        int length = buffer.getLength();
+
+        if (length > 0)
+        {
+            Object src = buffer.getData();
+
+            if (src != null)
+            {
+                Object dst;
+
+                if (src instanceof short[])
+                {
+                    if ((shorts == null) || (shorts.length < length))
+                        shorts = new short[length];
+                    dst = shorts;
+                    bytesLength = 0;
+                    shortsLength = length;
+                }
+                else if (src instanceof byte[])
+                {
+                    if ((bytes == null) || (bytes.length < length))
+                        bytes = new byte[length];
+                    dst = bytes;
+                    bytesLength = length;
+                    shortsLength = 0;
+                }
+                else
+                {
+                    bytesLength = 0;
+                    shortsLength = 0;
+                    return;
+                }
+                System.arraycopy(src, buffer.getOffset(), dst, 0, length);
+
+                if (thread == null)
+                    startThread();
+                else
+                    notify();
+            }
+        }
+    }
+
+    /**
      * Runs the actual audio level calculations and dispatches to the
      * {@link #listener}.
      */
@@ -102,14 +170,15 @@ public class AudioLevelEventDispatcher
     {
         long idleTimeoutStart = -1;
 
-        while (true)
+        do
         {
             SimpleAudioLevelListener listener;
             AudioLevelMap cache;
             long ssrc;
 
-            byte[] data;
-            int dataLength;
+            byte[] bytes;
+            short[] shorts;
+            int length;
 
             synchronized(this)
             {
@@ -126,19 +195,36 @@ public class AudioLevelEventDispatcher
                 if ((listener == null) && ((cache == null) || (ssrc == -1)))
                     break;
 
-                data = this.data;
-                dataLength = this.dataLength;
+                if (shortsLength > 0)
+                {
+                    bytes = null;
+                    shorts = this.shorts;
+                    length = shortsLength;
+                }
+                else if (bytesLength > 0)
+                {
+                    bytes = this.bytes;
+                    shorts = null;
+                    length = bytesLength;
+                }
+                else
+                {
+                    bytes = null;
+                    shorts = null;
+                    length = 0;
+                }
                 /*
                  * If there is no data to calculate the audio level of, wait for
                  * such data to be provided.
                  */
-                if ((data == null) || (dataLength < 1))
+                if (((bytes == null) && (shorts == null)) || (length < 1))
                 {
                     // The current thread is idle.
+                    long now = System.currentTimeMillis();
+
                     if (idleTimeoutStart == -1)
-                        idleTimeoutStart = System.currentTimeMillis();
-                    else if ((System.currentTimeMillis() - idleTimeoutStart)
-                            >= IDLE_TIMEOUT)
+                        idleTimeoutStart = now;
+                    else if ((now - idleTimeoutStart) >= IDLE_TIMEOUT)
                         break;
 
                     boolean interrupted = false;
@@ -157,18 +243,40 @@ public class AudioLevelEventDispatcher
                     continue;
                 }
                 // The values of data and dataLength seem valid so consume them.
-                this.data = null;
-                this.dataLength = 0;
+                if (this.shorts == shorts)
+                    this.shorts = null;
+                else if (this.bytes == bytes)
+                    this.bytes = null;
+                bytesLength = 0;
+                shortsLength = 0;
                 // The current thread is no longer idle.
                 idleTimeoutStart = -1;
             }
 
-            int newLevel
-                = AudioLevelCalculator.calculateSoundPressureLevel(
-                        data, 0, dataLength,
-                        SimpleAudioLevelListener.MIN_LEVEL,
-                        SimpleAudioLevelListener.MAX_LEVEL,
-                        lastLevel);
+            int newLevel;
+
+            if (shorts != null)
+            {
+                newLevel
+                    = AudioLevelCalculator.calculateSoundPressureLevel(
+                            shorts, 0, length,
+                            SimpleAudioLevelListener.MIN_LEVEL,
+                            SimpleAudioLevelListener.MAX_LEVEL,
+                            lastLevel);
+            }
+            else if (bytes != null)
+            {
+                newLevel
+                    = AudioLevelCalculator.calculateSoundPressureLevel(
+                            bytes, 0, length,
+                            SimpleAudioLevelListener.MIN_LEVEL,
+                            SimpleAudioLevelListener.MAX_LEVEL,
+                            lastLevel);
+            }
+            else
+            {
+                newLevel = 0;
+            }
 
             /*
              * In order to try to mitigate the issue with allocating data, try
@@ -177,10 +285,16 @@ public class AudioLevelEventDispatcher
              */
             synchronized (this)
             {
-                if ((this.data == null)
-                        && (this.listener == null)
-                        && ((this.cache == null) || (this.ssrc == -1)))
-                    this.data = data;
+                if (shorts != null)
+                {
+                    if (this.shorts == null)
+                        this.shorts = shorts;
+                }
+                else if (bytes != null)
+                {
+                    if (this.bytes == null)
+                        this.bytes = bytes;
+                }
             }
 
             try
@@ -197,60 +311,7 @@ public class AudioLevelEventDispatcher
                 lastLevel = newLevel;
             }
         }
-    }
-
-    /**
-     * Adds data to be processed.
-     *
-     * @param buffer the data that we'd like to queue for processing.
-     */
-    public synchronized void addData(Buffer buffer)
-    {
-        /*
-         * If no one is interested in the audio level, do not even add the
-         * Buffer data.
-         */
-        if ((listener == null) && ((cache == null) || (ssrc == -1)))
-            return;
-
-        dataLength = buffer.getLength();
-        if (dataLength > 0)
-        {
-            if((data == null) || (data.length < dataLength))
-                data = new byte[dataLength];
-
-            Object bufferData = buffer.getData();
-
-            if (bufferData != null)
-            {
-                System.arraycopy(
-                        bufferData, buffer.getOffset(),
-                        data, 0,
-                        dataLength);
-            }
-
-            if (thread == null)
-                startThread();
-            else
-                notify();
-        }
-    }
-
-    /**
-     * Sets the new listener that will be gathering all events from this
-     * dispatcher.
-     *
-     * @param listener the listener that we will be notifying or <tt>null</tt>
-     * if we are to remove it.
-     */
-    public synchronized void setAudioLevelListener(
-            SimpleAudioLevelListener listener)
-    {
-        if (this.listener != listener)
-        {
-            this.listener = listener;
-            startOrNotifyThread();
-        }
+        while (true);
     }
 
     /**
@@ -273,6 +334,23 @@ public class AudioLevelEventDispatcher
     }
 
     /**
+     * Sets the new listener that will be gathering all events from this
+     * dispatcher.
+     *
+     * @param listener the listener that we will be notifying or <tt>null</tt>
+     * if we are to remove it.
+     */
+    public synchronized void setAudioLevelListener(
+            SimpleAudioLevelListener listener)
+    {
+        if (this.listener != listener)
+        {
+            this.listener = listener;
+            startOrNotifyThread();
+        }
+    }
+
+    /**
      * Starts the <tt>Thread</tt> which is to run the audio level calculations
      * and to dispatch to {@link #listener} if necessary or notifies it about a
      * change it the state on which it depends.
@@ -284,7 +362,8 @@ public class AudioLevelEventDispatcher
             thread = null;
             notify();
         }
-        else if ((data != null) && (dataLength > 0))
+        else if (((shorts != null) && (shortsLength > 0))
+                || ((bytes != null) && (bytesLength > 0)))
         {
             if (thread == null)
                 startThread();
@@ -324,8 +403,9 @@ public class AudioLevelEventDispatcher
                                     && ((listener != null)
                                             || ((cache != null)
                                                     && (ssrc != -1)))
-                                    && (data != null)
-                                    && (dataLength > 0))
+                                    && (((bytes != null) && (bytesLength > 0))
+                                            || ((shorts != null)
+                                                    && (shortsLength > 0))))
                                 startThread();
                         }
                     }

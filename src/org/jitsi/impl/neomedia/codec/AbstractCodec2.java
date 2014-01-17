@@ -353,6 +353,16 @@ public abstract class AbstractCodec2
         return doProcess(inputBuffer, outputBuffer);
     }
 
+    /**
+     * Sets the <tt>Format</tt> of the media data to be input for processing in
+     * this <tt>Codec</tt>.
+     *
+     * @param format the <tt>Format</tt> of the media data to be input for
+     * processing in this <tt>Codec</tt>
+     * @return the <tt>Format</tt> of the media data to be input for processing
+     * in this <tt>Codec</tt> if <tt>format</tt> is compatible with this
+     * <tt>Codec</tt>; otherwise, <tt>null</tt>
+     */
     @Override
     public Format setInputFormat(Format format)
     {
@@ -428,7 +438,9 @@ public abstract class AbstractCodec2
                 newBytes = new byte[newSize];
                 buffer.setData(newBytes);
                 if (arraycopy)
+                {
                     System.arraycopy(bytes, 0, newBytes, 0, bytes.length);
+                }
                 else
                 {
                     buffer.setLength(0);
@@ -448,7 +460,10 @@ public abstract class AbstractCodec2
         return newBytes;
     }
 
-    protected short[] validateShortArraySize(Buffer buffer, int newSize)
+    protected short[] validateShortArraySize(
+            Buffer buffer,
+            int newSize,
+            boolean arraycopy)
     {
         Object data = buffer.getData();
         short[] newShorts;
@@ -457,20 +472,30 @@ public abstract class AbstractCodec2
         {
             short[] shorts = (short[]) data;
 
-            if (shorts.length >= newSize)
-                return shorts;
-
-            newShorts = new short[newSize];
-            System.arraycopy(shorts, 0, newShorts, 0, shorts.length);
+            if (shorts.length < newSize)
+            {
+                newShorts = new short[newSize];
+                buffer.setData(newShorts);
+                if (arraycopy)
+                {
+                    System.arraycopy(shorts, 0, newShorts, 0, shorts.length);
+                }
+                else
+                {
+                    buffer.setLength(0);
+                    buffer.setOffset(0);
+                }
+            }
+            else
+                newShorts = shorts;
         }
         else
         {
             newShorts = new short[newSize];
+            buffer.setData(newShorts);
             buffer.setLength(0);
             buffer.setOffset(0);
         }
-
-        buffer.setData(newShorts);
         return newShorts;
     }
 }

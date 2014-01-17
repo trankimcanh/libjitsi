@@ -19,6 +19,7 @@ import javax.media.protocol.*;
 import org.jitsi.impl.neomedia.*;
 import org.jitsi.impl.neomedia.control.*;
 import org.jitsi.impl.neomedia.device.*;
+import org.jitsi.impl.neomedia.jmfext.media.renderer.audio.*;
 import org.jitsi.impl.neomedia.protocol.*;
 import org.jitsi.util.*;
 
@@ -609,13 +610,13 @@ public class AudioMixer
     }
 
     /**
-     * Gets an array of <tt>FormatControl</tt>s for the
-     * <tt>CaptureDevice</tt> this <tt>AudioMixer</tt> provides through
-     * its output <tt>AudioMixingPushBufferDataSource</tt>s.
+     * Gets an array of <tt>FormatControl</tt>s for the <tt>CaptureDevice</tt>
+     * this <tt>AudioMixer</tt> provides through its output
+     * <tt>AudioMixingPushBufferDataSource</tt>s.
      *
      * @return an array of <tt>FormatControl</tt>s for the
-     *         <tt>CaptureDevice</tt> this <tt>AudioMixer</tt> provides
-     *         through its output <tt>AudioMixingPushBufferDataSource</tt>s
+     * <tt>CaptureDevice</tt> this <tt>AudioMixer</tt> provides through its
+     * output <tt>AudioMixingPushBufferDataSource</tt>s
      */
     FormatControl[] getFormatControls()
     {
@@ -809,15 +810,13 @@ public class AudioMixer
     }
 
     /**
-     * Gets the <tt>AudioFormat</tt> in which the input
-     * <tt>DataSource</tt>s of this <tt>AudioMixer</tt> can produce data
-     * and which is to be the output <tt>Format</tt> of this
-     * <tt>AudioMixer</tt>.
+     * Gets the <tt>AudioFormat</tt> in which the input <tt>DataSource</tt>s of
+     * this <tt>AudioMixer</tt> can produce data and which is to be the output
+     * <tt>Format</tt> of this <tt>AudioMixer</tt>.
      *
-     * @return the <tt>AudioFormat</tt> in which the input
-     *         <tt>DataSource</tt>s of this <tt>AudioMixer</tt> can
-     *         produce data and which is to be the output <tt>Format</tt> of
-     *         this <tt>AudioMixer</tt>
+     * @return the <tt>AudioFormat</tt> in which the input <tt>DataSource</tt>s
+     * of this <tt>AudioMixer</tt> can produce data and which is to be the
+     * output <tt>Format</tt> of this <tt>AudioMixer</tt>
      */
     private AudioFormat getOutFormatFromInDataSources()
     {
@@ -838,30 +837,48 @@ public class AudioMixer
                     = (FormatControl)
                         effectiveInDataSource.getControl(formatControlType);
 
-                if (formatControl != null)
+                if (formatControl == null)
+                    continue;
+
+                AudioFormat format = (AudioFormat) formatControl.getFormat();
+
+                if (format == null)
+                    continue;
+
+                // signed
+                int signed = format.getSigned();
+
+                if ((AudioFormat.SIGNED != signed)
+                        && (Format.NOT_SPECIFIED != signed))
+                    continue;
+
+                // dataType, endian
+                Class<?> dataType = format.getDataType();
+                int endian = format.getEndian();
+                boolean assign;
+
+                if (Format.shortArray.equals(dataType))
                 {
-                    AudioFormat format
-                        = (AudioFormat) formatControl.getFormat();
-
-                    if (format != null)
-                    {
-                        // SIGNED
-                        int signed = format.getSigned();
-
-                        if ((AudioFormat.SIGNED == signed)
-                                || (Format.NOT_SPECIFIED == signed))
-                        {
-                            // LITTLE_ENDIAN
-                            int endian = format.getEndian();
-
-                            if ((AudioFormat.LITTLE_ENDIAN == endian)
-                                    || (Format.NOT_SPECIFIED == endian))
-                            {
-                                outFormat = format;
-                                break;
-                            }
-                        }
-                    }
+                    assign
+                        = (AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN
+                                == endian)
+                            || (Format.NOT_SPECIFIED == endian);
+                }
+                else if (Format.byteArray.equals(dataType))
+                {
+                    assign
+                        = (AbstractAudioRenderer.NATIVE_AUDIO_FORMAT_ENDIAN
+                                == endian)
+                            || (Format.NOT_SPECIFIED == endian);
+                }
+                else
+                {
+                    assign = false;
+                }
+                if (assign)
+                {
+                    outFormat = format;
+                    break;
                 }
             }
         }
@@ -881,12 +898,12 @@ public class AudioMixer
     /**
      * Gets the <tt>AudioMixerPushBufferStream</tt>, first creating it if it
      * does not exist already, which reads data from the input
-     * <tt>DataSource</tt>s of this <tt>AudioMixer</tt> and pushes it to
-     * output <tt>AudioMixingPushBufferStream</tt>s for audio mixing.
+     * <tt>DataSource</tt>s of this <tt>AudioMixer</tt> and pushes it to output
+     * <tt>AudioMixingPushBufferStream</tt>s for audio mixing.
      *
-     * @return the <tt>AudioMixerPushBufferStream</tt> which reads data from
-     * the input <tt>DataSource</tt>s of this <tt>AudioMixer</tt> and pushes it
-     * to output <tt>AudioMixingPushBufferStream</tt>s for audio mixing
+     * @return the <tt>AudioMixerPushBufferStream</tt> which reads data from the
+     * input <tt>DataSource</tt>s of this <tt>AudioMixer</tt> and pushes it to
+     * output <tt>AudioMixingPushBufferStream</tt>s for audio mixing
      */
     AudioMixerPushBufferStream getOutStream()
     {
@@ -897,7 +914,7 @@ public class AudioMixer
                     ? getOutFormatFromInDataSources()
                     : outStream.getFormat();
 
-            setOutFormatToInDataSources(outFormat);
+            setOutFormatOnInDataSources(outFormat);
 
             Collection<InStreamDesc> inStreams;
 
@@ -905,8 +922,10 @@ public class AudioMixer
             {
                 inStreams
                     = getInStreamsFromInDataSources(
-                        outFormat,
-                        (outStream == null) ? null : outStream.getInStreams());
+                            outFormat,
+                            (outStream == null)
+                                ? null
+                                : outStream.getInStreams());
             }
             catch (IOException ioex)
             {
@@ -1036,16 +1055,16 @@ public class AudioMixer
     }
 
     /**
-     * Sets a specific <tt>AudioFormat</tt>, if possible, as the output
-     * format of the input <tt>DataSource</tt>s of this
-     * <tt>AudioMixer</tt> in an attempt to not have to perform explicit
-     * transcoding of the input <tt>SourceStream</tt>s.
+     * Sets a specific <tt>AudioFormat</tt>, if possible, as the output format
+     * of the input <tt>DataSource</tt>s of this <tt>AudioMixer</tt> in an
+     * attempt to not have to perform explicit transcoding of the input
+     * <tt>SourceStream</tt>s.
      *
      * @param outFormat the <tt>AudioFormat</tt> in which the input
      * <tt>DataSource</tt>s of this <tt>AudioMixer</tt> are to be instructed to
      * output
      */
-    private void setOutFormatToInDataSources(AudioFormat outFormat)
+    private void setOutFormatOnInDataSources(AudioFormat outFormat)
     {
         String formatControlType = FormatControl.class.getName();
 
@@ -1063,22 +1082,27 @@ public class AudioMixer
 
                     if ((inFormat == null) || !matches(inFormat, outFormat))
                     {
-                        Format setFormat
-                            = formatControl.setFormat(outFormat);
+                        Format setFormat = formatControl.setFormat(outFormat);
 
                         if (setFormat == null)
+                        {
                             logger.error(
                                     "Failed to set format of inDataSource to "
                                         + outFormat);
+                        }
                         else if (setFormat != outFormat)
+                        {
                             logger.warn(
                                     "Failed to change format of inDataSource"
                                         + " from " + setFormat + " to "
                                         + outFormat);
+                        }
                         else if (logger.isTraceEnabled())
+                        {
                             logger.trace(
                                     "Set format of inDataSource to "
                                         + setFormat);
+                        }
                     }
                 }
             }

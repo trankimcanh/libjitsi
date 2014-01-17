@@ -26,10 +26,10 @@ JNIEXPORT jlong JNICALL Java_org_jitsi_impl_neomedia_codec_audio_g722_JNIEncoder
 /*
  * Class:     org_jitsi_impl_neomedia_codec_audio_g722_JNIEncoder
  * Method:    g722_encoder_process
- * Signature: (J[BI[BII)V
+ * Signature: (J[SI[BII)V
  */
 JNIEXPORT void JNICALL Java_org_jitsi_impl_neomedia_codec_audio_g722_JNIEncoder_g722_1encoder_1process
-  (JNIEnv *, jclass, jlong, jbyteArray, jint, jbyteArray, jint, jint);
+  (JNIEnv *, jclass, jlong, jshortArray, jint, jbyteArray, jint, jint);
 
 #ifdef __cplusplus
 }

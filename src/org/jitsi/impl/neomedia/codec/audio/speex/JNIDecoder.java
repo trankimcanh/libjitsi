@@ -9,17 +9,17 @@ package org.jitsi.impl.neomedia.codec.audio.speex;
 import javax.media.*;
 import javax.media.format.*;
 
-import net.java.sip.communicator.impl.neomedia.codec.audio.speex.*;
 import net.sf.fmj.media.*;
 
 import org.jitsi.impl.neomedia.codec.*;
+import org.jitsi.impl.neomedia.jmfext.media.renderer.audio.*;
 import org.jitsi.service.neomedia.codec.*;
 
 /**
  * Implements a Speex decoder and RTP depacketizer using the native Speex
  * library.
  *
- * @author Lubomir Marinov
+ * @author Lyubomir Marinov
  */
 public class JNIDecoder
     extends AbstractCodec2
@@ -40,14 +40,14 @@ public class JNIDecoder
                 {
                     new AudioFormat(
                             AudioFormat.LINEAR,
-                            Format.NOT_SPECIFIED,
+                            /* sampleRate */ Format.NOT_SPECIFIED,
                             16,
                             1,
-                            AudioFormat.LITTLE_ENDIAN,
+                            AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN,
                             AudioFormat.SIGNED,
-                            Format.NOT_SPECIFIED,
-                            Format.NOT_SPECIFIED,
-                            Format.byteArray)
+                            /* frameSizeInBits */ Format.NOT_SPECIFIED,
+                            /* frameRate */ Format.NOT_SPECIFIED,
+                            Format.shortArray)
                 };
 
     static
@@ -65,12 +65,12 @@ public class JNIDecoder
                 = new AudioFormat(
                         Constants.SPEEX_RTP,
                         SUPPORTED_INPUT_SAMPLE_RATES[i],
-                        Format.NOT_SPECIFIED,
+                        /* sampleSizeInBits */ Format.NOT_SPECIFIED,
                         1,
                         AudioFormat.LITTLE_ENDIAN,
                         AudioFormat.SIGNED,
-                        Format.NOT_SPECIFIED,
-                        Format.NOT_SPECIFIED,
+                        /* frameSizeInBits */ Format.NOT_SPECIFIED,
+                        /* frameRate */ Format.NOT_SPECIFIED,
                         Format.byteArray);
         }
     }
@@ -126,14 +126,14 @@ public class JNIDecoder
         // state
         if (state != 0)
         {
-            Speex.speex_decoder_destroy(state);
+            Speex.decoder_destroy(state);
             state = 0;
             sampleRate = 0;
             frameSize = 0;
             duration = 0;
         }
         // bits
-        Speex.speex_bits_destroy(bits);
+        Speex.bits_destroy(bits);
         bits = 0;
     }
 
@@ -152,7 +152,7 @@ public class JNIDecoder
     protected void doOpen()
         throws ResourceUnavailableException
     {
-        bits = Speex.speex_bits_init();
+        bits = Speex.bits_init();
         if (bits == 0)
             throw new ResourceUnavailableException("speex_bits_init");
     }
@@ -160,36 +160,36 @@ public class JNIDecoder
     /**
      * Decodes Speex media from a specific input <tt>Buffer</tt>
      *
-     * @param inputBuffer input <tt>Buffer</tt>
-     * @param outputBuffer output <tt>Buffer</tt>
+     * @param inBuffer input <tt>Buffer</tt>
+     * @param outBuffer output <tt>Buffer</tt>
      * @return <tt>BUFFER_PROCESSED_OK</tt> if <tt>inBuffer</tt> has been
      * successfully processed
      * @see AbstractCodecExt#doProcess(Buffer, Buffer)
      */
     @Override
-    protected int doProcess(Buffer inputBuffer, Buffer outputBuffer)
+    protected int doProcess(Buffer inBuffer, Buffer outBuffer)
     {
-        Format inputFormat = inputBuffer.getFormat();
+        Format inFormat = inBuffer.getFormat();
 
-        if ((inputFormat != null)
-                && (inputFormat != this.inputFormat)
-                && !inputFormat.equals(this.inputFormat))
+        if ((inFormat != null)
+                && (inFormat != this.inputFormat)
+                && !inFormat.equals(this.inputFormat))
         {
-            if (null == setInputFormat(inputFormat))
+            if (null == setInputFormat(inFormat))
                 return BUFFER_PROCESSED_FAILED;
         }
-        inputFormat = this.inputFormat;
+        inFormat = this.inputFormat;
 
         /*
          * Make sure that the native Speex decoder which is represented by this
          * instance is configured to work with the inputFormat.
          */
-        AudioFormat inputAudioFormat = (AudioFormat) inputFormat;
-        int inputSampleRate = (int) inputAudioFormat.getSampleRate();
+        AudioFormat inAudioFormat = (AudioFormat) inFormat;
+        int inSampleRate = (int) inAudioFormat.getSampleRate();
 
-        if ((state != 0) && (sampleRate != inputSampleRate))
+        if ((state != 0) && (sampleRate != inSampleRate))
         {
-            Speex.speex_decoder_destroy(state);
+            Speex.decoder_destroy(state);
             state = 0;
             sampleRate = 0;
             frameSize = 0;
@@ -197,88 +197,79 @@ public class JNIDecoder
         if (state == 0)
         {
             long mode
-                = Speex.speex_lib_get_mode(
-                        (inputSampleRate == 16000)
-                            ? Speex.SPEEX_MODEID_WB
-                            : (inputSampleRate == 32000)
-                                ? Speex.SPEEX_MODEID_UWB
-                                : Speex.SPEEX_MODEID_NB);
+                = Speex.lib_get_mode(
+                        (inSampleRate == 16000)
+                            ? Speex.MODEID_WB
+                            : (inSampleRate == 32000)
+                                ? Speex.MODEID_UWB
+                                : Speex.MODEID_NB);
 
             if (mode == 0)
                 return BUFFER_PROCESSED_FAILED;
-            state = Speex.speex_decoder_init(mode);
+            state = Speex.decoder_init(mode);
             if (state == 0)
                 return BUFFER_PROCESSED_FAILED;
-            if (Speex.speex_decoder_ctl(
-                        state,
-                        Speex.SPEEX_SET_ENH,
-                        1)
-                    != 0)
+            if (Speex.decoder_ctl(state, Speex.SET_ENH, 1) != 0)
                 return BUFFER_PROCESSED_FAILED;
-            if (Speex.speex_decoder_ctl(
-                        state,
-                        Speex.SPEEX_SET_SAMPLING_RATE,
-                        inputSampleRate)
+            if (Speex.decoder_ctl( state, Speex.SET_SAMPLING_RATE, inSampleRate)
                     != 0)
                 return BUFFER_PROCESSED_FAILED;
 
-            int frameSize
-                = Speex.speex_decoder_ctl(state, Speex.SPEEX_GET_FRAME_SIZE);
+            int frameSize = Speex.decoder_ctl(state, Speex.GET_FRAME_SIZE);
 
             if (frameSize < 0)
                 return BUFFER_PROCESSED_FAILED;
 
-            sampleRate = inputSampleRate;
-            this.frameSize = frameSize * 2 /* (sampleSizeInBits / 8) */;
+            sampleRate = inSampleRate;
+            this.frameSize = frameSize;
             duration = (frameSize * 1000 * 1000000) / sampleRate;
         }
 
         /* Read the encoded audio data from inputBuffer into the SpeexBits. */
-        int inputLength = inputBuffer.getLength();
+        int inLength = inBuffer.getLength();
 
-        if (inputLength > 0)
+        if (inLength > 0)
         {
-            byte[] input = (byte[]) inputBuffer.getData();
-            int inputOffset = inputBuffer.getOffset();
+            byte[] in = (byte[]) inBuffer.getData();
+            int inOffset = inBuffer.getOffset();
 
-            Speex.speex_bits_read_from(bits, input, inputOffset, inputLength);
-            inputLength = 0;
-            inputBuffer.setLength(inputLength);
-            inputBuffer.setOffset(inputOffset + inputLength);
+            Speex.bits_read_from(bits, in, inOffset, inLength);
+            inLength = 0;
+            inBuffer.setLength(inLength);
+            inBuffer.setOffset(inOffset + inLength);
         }
 
         /* At long last, do the actual decoding. */
-        int outputLength = this.frameSize;
+        int outLength = this.frameSize;
         boolean inputBufferNotConsumed;
 
-        if (outputLength > 0)
+        if (outLength > 0)
         {
-            byte[] output
-                = validateByteArraySize(outputBuffer, outputLength, false);
+            short[] out = validateShortArraySize(outBuffer, outLength, false);
 
-            if (0 == Speex.speex_decode_int(state, bits, output, 0))
+            if (0 == Speex.decode_int(state, bits, out, 0))
             {
-                outputBuffer.setDuration(duration);
-                outputBuffer.setFormat(getOutputFormat());
-                outputBuffer.setLength(outputLength);
-                outputBuffer.setOffset(0);
-                inputBufferNotConsumed = (Speex.speex_bits_remaining(bits) > 0);
+                outBuffer.setDuration(duration);
+                outBuffer.setFormat(getOutputFormat());
+                outBuffer.setLength(outLength);
+                outBuffer.setOffset(0);
+                inputBufferNotConsumed = (Speex.bits_remaining(bits) > 0);
             }
             else
             {
-                outputBuffer.setLength(0);
-                discardOutputBuffer(outputBuffer);
+                outBuffer.setLength(0);
+                discardOutputBuffer(outBuffer);
                 inputBufferNotConsumed = false;
             }
         }
         else
         {
-            outputBuffer.setLength(0);
-            discardOutputBuffer(outputBuffer);
+            outBuffer.setLength(0);
+            discardOutputBuffer(outBuffer);
             inputBufferNotConsumed = false;
         }
 
-        if ((inputLength < 1) && !inputBufferNotConsumed)
+        if ((inLength < 1) && !inputBufferNotConsumed)
             return BUFFER_PROCESSED_OK;
         else
             return BUFFER_PROCESSED_OK | INPUT_BUFFER_NOT_CONSUMED;
@@ -295,21 +286,21 @@ public class JNIDecoder
     @Override
     protected Format[] getMatchingOutputFormats(Format inputFormat)
     {
-        AudioFormat inputAudioFormat = (AudioFormat) inputFormat;
+        AudioFormat af = (AudioFormat) inputFormat;
 
         return
             new Format[]
                     {
                         new AudioFormat(
                                 AudioFormat.LINEAR,
-                                inputAudioFormat.getSampleRate(),
+                                af.getSampleRate(),
                                 16,
                                 1,
-                                AudioFormat.LITTLE_ENDIAN,
+                                AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN,
                                 AudioFormat.SIGNED,
-                                Format.NOT_SPECIFIED,
-                                Format.NOT_SPECIFIED,
-                                Format.byteArray)
+                                /* frameSizeInBits */ Format.NOT_SPECIFIED,
+                                /* frameRate */ Format.NOT_SPECIFIED,
+                                Format.shortArray)
                     };
     }
 
@@ -327,46 +318,45 @@ public class JNIDecoder
     @Override
     public Format setInputFormat(Format format)
     {
-        Format inputFormat = super.setInputFormat(format);
+        Format inFormat = super.setInputFormat(format);
 
-        if (inputFormat != null)
+        if (inFormat != null)
         {
-            double outputSampleRate;
-            int outputChannels;
+            double outSampleRate;
+            int outChannels;
 
             if (outputFormat == null)
             {
-                outputSampleRate = Format.NOT_SPECIFIED;
-                outputChannels = Format.NOT_SPECIFIED;
+                outSampleRate = Format.NOT_SPECIFIED;
+                outChannels = Format.NOT_SPECIFIED;
             }
             else
             {
-                AudioFormat outputAudioFormat = (AudioFormat) outputFormat;
+                AudioFormat outAudioFormat = (AudioFormat) outputFormat;
 
-                outputSampleRate = outputAudioFormat.getSampleRate();
-                outputChannels = outputAudioFormat.getChannels();
+                outSampleRate = outAudioFormat.getSampleRate();
+                outChannels = outAudioFormat.getChannels();
             }
 
-            AudioFormat inputAudioFormat = (AudioFormat) inputFormat;
-            double inputSampleRate = inputAudioFormat.getSampleRate();
-            int inputChannels = inputAudioFormat.getChannels();
+            AudioFormat inAudioFormat = (AudioFormat) inFormat;
+            double inSampleRate = inAudioFormat.getSampleRate();
+            int inChannels = inAudioFormat.getChannels();
 
-            if ((outputSampleRate != inputSampleRate)
-                    || (outputChannels != inputChannels))
+            if ((outSampleRate != inSampleRate) || (outChannels != inChannels))
             {
                 setOutputFormat(
-                    new AudioFormat(
-                            AudioFormat.LINEAR,
-                            inputSampleRate,
-                            16,
-                            inputChannels,
-                            AudioFormat.LITTLE_ENDIAN,
-                            AudioFormat.SIGNED,
-                            Format.NOT_SPECIFIED,
-                            Format.NOT_SPECIFIED,
-                            Format.byteArray));
+                        new AudioFormat(
+                                AudioFormat.LINEAR,
+                                inSampleRate,
+                                16,
+                                inChannels,
+                                AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN,
+                                AudioFormat.SIGNED,
+                                /* frameSizeInBits */ Format.NOT_SPECIFIED,
+                                /* frameRate */ Format.NOT_SPECIFIED,
+                                Format.shortArray));
             }
         }
-        return inputFormat;
+        return inFormat;
     }
 }

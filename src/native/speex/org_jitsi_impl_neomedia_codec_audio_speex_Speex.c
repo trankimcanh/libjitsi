@@ -12,8 +12,8 @@
 #include <stdlib.h>
 
 JNIEXPORT void JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1destroy
-    (JNIEnv *jniEnv, jclass clazz, jlong bits)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1destroy
+    (JNIEnv *env, jclass clazz, jlong bits)
 {
     SpeexBits *bitsPtr = (SpeexBits *) (intptr_t) bits;
 
@@ -22,8 +22,8 @@ Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1destroy
 }
 
 JNIEXPORT jlong JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1init
-    (JNIEnv *jniEnv, jclass clazz)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1init
+    (JNIEnv *env, jclass clazz)
 {
     SpeexBits *bits = malloc(sizeof(SpeexBits));
 
@@ -33,18 +33,18 @@ Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1init
 }
 
 JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1nbytes
-    (JNIEnv *jniEnv, jclass clazz, jlong bits)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1nbytes
+    (JNIEnv *env, jclass clazz, jlong bits)
 {
     return speex_bits_nbytes((SpeexBits *) (intptr_t) bits);
 }
 
 JNIEXPORT void JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1read_1from
-    (JNIEnv *jniEnv, jclass clazz,
-    jlong bits, jbyteArray bytes, jint bytesOffset, jint len)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1read_1from
+    (JNIEnv *env, jclass clazz,
+        jlong bits, jbyteArray bytes, jint bytesOffset, jint len)
 {
-    jbyte *bytesPtr = (*jniEnv)->GetPrimitiveArrayCritical(jniEnv, bytes, NULL);
+    jbyte *bytesPtr = (*env)->GetPrimitiveArrayCritical(env, bytes, NULL);
 
     if (bytesPtr)
     {
@@ -52,44 +52,40 @@ Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1read_1from
             (SpeexBits *) (intptr_t) bits,
             (char *) (bytesPtr + bytesOffset),
             len);
-        (*jniEnv)->ReleasePrimitiveArrayCritical(
-                jniEnv,
-                bytes,
-                bytesPtr,
-                JNI_ABORT);
+        (*env)->ReleasePrimitiveArrayCritical(env, bytes, bytesPtr, JNI_ABORT);
     }
 }
 
 JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1remaining
-    (JNIEnv *jniEnv, jclass clazz, jlong bits)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1remaining
+    (JNIEnv *env, jclass clazz, jlong bits)
 {
     return speex_bits_remaining((SpeexBits *) (intptr_t) bits);
 }
 
 JNIEXPORT void JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1reset
-    (JNIEnv *jniEnv, jclass clazz, jlong bits)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1reset
+    (JNIEnv *env, jclass clazz, jlong bits)
 {
     speex_bits_reset((SpeexBits *) (intptr_t) bits);
 }
 
 JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1write
-    (JNIEnv *jniEnv, jclass clazz,
-    jlong bits, jbyteArray bytes, jint bytesOffset, jint max_len)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_bits_1write
+    (JNIEnv *env, jclass clazz,
+        jlong bits, jbyteArray bytes, jint bytesOffset, jint max_len)
 {
-    jbyte *bytesPtr = (*jniEnv)->GetPrimitiveArrayCritical(jniEnv, bytes, NULL);
+    jbyte *bytes_ = (*env)->GetPrimitiveArrayCritical(env, bytes, NULL);
     jint ret;
 
-    if (bytesPtr)
+    if (bytes_)
     {
         ret
             = speex_bits_write(
                 (SpeexBits *) (intptr_t) bits,
-                (char *) (bytesPtr + bytesOffset),
+                (char *) (bytes_ + bytesOffset),
                 max_len);
-        (*jniEnv)->ReleasePrimitiveArrayCritical(jniEnv, bytes, bytesPtr, 0);
+        (*env)->ReleasePrimitiveArrayCritical(env, bytes, bytes_, 0);
     }
     else
         ret = 0;
@@ -97,21 +93,21 @@ Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1bits_1write
 }
 
 JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decode_1int
-    (JNIEnv *jniEnv, jclass clazz,
-    jlong state, jlong bits, jbyteArray out, jint outOffset)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_decode_1int
+    (JNIEnv *env, jclass clazz,
+        jlong state, jlong bits, jshortArray out, jint outOffset)
 {
-    jbyte *outPtr = (*jniEnv)->GetByteArrayElements(jniEnv, out, NULL);
+    jshort *out_ = (*env)->GetPrimitiveArrayCritical(env, out, NULL);
     jint ret;
 
-    if (outPtr)
+    if (out_)
     {
         ret
             = speex_decode_int(
                 (void *) (intptr_t) state,
                 (SpeexBits *) (intptr_t) bits,
-                (spx_int16_t *) (outPtr + outOffset));
-        (*jniEnv)->ReleaseByteArrayElements(jniEnv, out, outPtr, 0);
+                (spx_int16_t *) (out_ + outOffset));
+        (*env)->ReleasePrimitiveArrayCritical(env, out, out_, 0);
     }
     else
         ret = -2;
@@ -119,8 +115,8 @@ Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decode_1int
 }
 
 JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decoder_1ctl__JI
-    (JNIEnv *jniEnv, jclass clazz, jlong state, jint request)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_decoder_1ctl__JI
+    (JNIEnv *env, jclass clazz, jlong state, jint request)
 {
     int ret;
     int value = 0;
@@ -132,42 +128,42 @@ Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decoder_1ctl__JI
 }
 
 JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decoder_1ctl__JII
-    (JNIEnv *jniEnv, jclass clazz, jlong state, jint request, jint value)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_decoder_1ctl__JII
+    (JNIEnv *env, jclass clazz, jlong state, jint request, jint value)
 {
     return speex_decoder_ctl((void *) (intptr_t) state, request, &value);
 }
 
 JNIEXPORT void JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decoder_1destroy
-    (JNIEnv *jniEnv, jclass clazz, jlong state)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_decoder_1destroy
+    (JNIEnv *env, jclass clazz, jlong state)
 {
     speex_decoder_destroy((void *) (intptr_t) state);
 }
 
 JNIEXPORT jlong JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1decoder_1init
-    (JNIEnv *jniEnv, jclass clazz, jlong mode)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_decoder_1init
+    (JNIEnv *env, jclass clazz, jlong mode)
 {
-    return (jlong)  (intptr_t) speex_decoder_init((SpeexMode *) (intptr_t) mode);
+    return (jlong) (intptr_t) speex_decoder_init((SpeexMode *) (intptr_t) mode);
 }
 
 JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encode_1int
-    (JNIEnv *jniEnv, jclass clazz,
-    jlong state, jbyteArray in, jint inOffset, jlong bits)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_encode_1int
+    (JNIEnv *env, jclass clazz,
+        jlong state, jshortArray in, jint inOffset, jlong bits)
 {
-    jbyte *inPtr = (*jniEnv)->GetByteArrayElements(jniEnv, in, NULL);
+    jshort *in_ = (*env)->GetPrimitiveArrayCritical(env, in, NULL);
     jint ret;
 
-    if (inPtr)
+    if (in_)
     {
         ret
             = speex_encode_int(
                 (void *) (intptr_t) state,
-                (spx_int16_t *) (inPtr + inOffset),
+                (spx_int16_t *) (in_ + inOffset),
                 (SpeexBits *) (intptr_t) bits);
-        (*jniEnv)->ReleaseByteArrayElements(jniEnv, in, inPtr, JNI_ABORT);
+        (*env)->ReleasePrimitiveArrayCritical(env, in, in_, JNI_ABORT);
     }
     else
         ret = 0;
@@ -175,8 +171,8 @@ Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encode_1int
 }
 
 JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encoder_1ctl__JI
-    (JNIEnv *jniEnv, jclass clazz, jlong state, jint request)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_encoder_1ctl__JI
+    (JNIEnv *env, jclass clazz, jlong state, jint request)
 {
     int ret;
     int value = 0;
@@ -188,43 +184,43 @@ Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encoder_1ctl__JI
 }
 
 JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encoder_1ctl__JII
-    (JNIEnv *jniEnv, jclass clazz, jlong state, jint request, jint value)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_encoder_1ctl__JII
+    (JNIEnv *env, jclass clazz, jlong state, jint request, jint value)
 {
     return speex_encoder_ctl((void *) (intptr_t) state, request, &value);
 }
 
 JNIEXPORT void JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encoder_1destroy
-    (JNIEnv *jniEnv, jclass clazz, jlong state)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_encoder_1destroy
+    (JNIEnv *env, jclass clazz, jlong state)
 {
     speex_encoder_destroy((void *) (intptr_t) state);
 }
 
 JNIEXPORT jlong JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1encoder_1init
-    (JNIEnv *jniEnv, jclass clazz, jlong mode)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_encoder_1init
+    (JNIEnv *env, jclass clazz, jlong mode)
 {
     return (jlong) (intptr_t) speex_encoder_init((SpeexMode *) (intptr_t) mode);
 }
 
 JNIEXPORT jlong JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1lib_1get_1mode
-    (JNIEnv *jniEnv, jclass clazz, jint mode)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_lib_1get_1mode
+    (JNIEnv *env, jclass clazz, jint mode)
 {
     return (jlong) (intptr_t) speex_lib_get_mode(mode);
 }
 
 JNIEXPORT void JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1resampler_1destroy
-    (JNIEnv *jniENv, jclass clazz, jlong state)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_resampler_1destroy
+    (JNIEnv *env, jclass clazz, jlong state)
 {
     speex_resampler_destroy((SpeexResamplerState *) (intptr_t) state);
 }
 
 JNIEXPORT jlong JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1resampler_1init
-    (JNIEnv *jniEnv, jclass clazz,
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_resampler_1init
+    (JNIEnv *env, jclass clazz,
     jint nb_channels, jint in_rate, jint out_rate, jint quality, jlong err)
 {
     return
@@ -238,43 +234,43 @@ Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1resampler_1init
 }
 
 JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1resampler_1process_1interleaved_1int
-    (JNIEnv *jniEnv, jclass clazz,
-    jlong state,
-    jbyteArray in, jint inOffset, jint in_len,
-    jbyteArray out, jint outOffset, jint out_len)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_resampler_1process_1interleaved_1int
+    (JNIEnv *env, jclass clazz,
+        jlong state,
+        jobject in, jint inOffsetInBytes, jint inSampleCount,
+        jobject out, jint outOffsetInBytes, jint outSampleCount)
 {
-    jbyte *inPtr = (*jniEnv)->GetPrimitiveArrayCritical(jniEnv, in, NULL);
+    jbyte *in_ = (*env)->GetPrimitiveArrayCritical(env, in, NULL);
     jint ret;
 
-    if (inPtr)
+    if (in_)
     {
-        jbyte *outPtr = (*jniEnv)->GetPrimitiveArrayCritical(jniEnv, out, NULL);
+        jbyte *out_ = (*env)->GetPrimitiveArrayCritical(env, out, NULL);
 
-        if (outPtr)
+        if (out_)
         {
-            spx_uint32_t _in_len = in_len;
-            spx_uint32_t _out_len = out_len;
+            spx_uint32_t in_len = inSampleCount;
+            spx_uint32_t out_len = outSampleCount;
 
             ret
                 = speex_resampler_process_interleaved_int(
                     (SpeexResamplerState *) (intptr_t) state,
-                    (spx_int16_t *) (inPtr + inOffset),
-                    &_in_len,
-                    (spx_int16_t *) (outPtr + outOffset),
-                    &_out_len);
-            (*jniEnv)->ReleasePrimitiveArrayCritical(jniEnv, out, outPtr, 0);
+                    (spx_int16_t *) (in_ + inOffsetInBytes),
+                    &in_len,
+                    (spx_int16_t *) (out_ + outOffsetInBytes),
+                    &out_len);
+            (*env)->ReleasePrimitiveArrayCritical(env, out, out_, 0);
 
             /*
              * speex_resampler_process_interleaved_int is supposed to return the
              * number of samples which have been written but it doesn't seem to
              * do it and instead returns zero.
              */
-            ret = _out_len;
+            ret = out_len;
         }
         else
             ret = 0;
-        (*jniEnv)->ReleasePrimitiveArrayCritical(jniEnv, in, inPtr, JNI_ABORT);
+        (*env)->ReleasePrimitiveArrayCritical(env, in, in_, JNI_ABORT);
     }
     else
         ret = 0;
@@ -282,8 +278,8 @@ Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1resampler_1process_1
 }
 
 JNIEXPORT jint JNICALL
-Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_speex_1resampler_1set_1rate
-    (JNIEnv *jniEnv, jclass clazz, jlong state, jint in_rate, jint out_rate)
+Java_org_jitsi_impl_neomedia_codec_audio_speex_Speex_resampler_1set_1rate
+    (JNIEnv *env, jclass clazz, jlong state, jint in_rate, jint out_rate)
 {
     return
         speex_resampler_set_rate(

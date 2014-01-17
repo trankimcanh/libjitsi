@@ -9,16 +9,16 @@ package org.jitsi.impl.neomedia.codec.audio.speex;
 import javax.media.*;
 import javax.media.format.*;
 
-import net.java.sip.communicator.impl.neomedia.codec.audio.speex.*;
 import net.sf.fmj.media.*;
 
 import org.jitsi.impl.neomedia.codec.*;
+import org.jitsi.impl.neomedia.jmfext.media.renderer.audio.*;
 import org.jitsi.service.neomedia.codec.*;
 
 /**
  * Implements a Speex encoder and RTP packetizer using the native Speex library.
  *
- * @author Lubomir Marinov
+ * @author Lyubomir Marinov
  */
 public class JNIEncoder
     extends AbstractCodec2
@@ -59,11 +59,11 @@ public class JNIEncoder
                         SUPPORTED_INPUT_SAMPLE_RATES[i],
                         16,
                         1,
-                        AudioFormat.LITTLE_ENDIAN,
+                        AbstractAudioRenderer.JAVA_AUDIO_FORMAT_ENDIAN,
                         AudioFormat.SIGNED,
-                        Format.NOT_SPECIFIED,
-                        Format.NOT_SPECIFIED,
-                        Format.byteArray);
+                        /* frameSizeInBits */ Format.NOT_SPECIFIED,
+                        /* frameRate */ Format.NOT_SPECIFIED,
+                        Format.shortArray);
         }
     }
 
@@ -93,12 +93,12 @@ public class JNIEncoder
      * need to be prepended to a subsequent input <tt>Buffer</tt> in order to
      * process a total of {@link #frameSize} bytes.
      */
-    private byte[] previousInput;
+    private short[] prevIn;
 
     /**
-     * The length of the audio data in {@link #previousInput}.
+     * The length of the audio data in {@link #prevIn}.
      */
-    private int previousInputLength = 0;
+    private int prevInLength = 0;
 
     /**
      * The sample rate configured into {@link #state}.
@@ -132,17 +132,17 @@ public class JNIEncoder
         // state
         if (state != 0)
         {
-            Speex.speex_encoder_destroy(state);
+            Speex.encoder_destroy(state);
             state = 0;
             sampleRate = 0;
             frameSize = 0;
             duration = 0;
         }
         // bits
-        Speex.speex_bits_destroy(bits);
+        Speex.bits_destroy(bits);
         bits = 0;
         // previousInput
-        previousInput = null;
+        prevIn = null;
     }
 
     /**
@@ -160,44 +160,44 @@ public class JNIEncoder
     protected void doOpen()
         throws ResourceUnavailableException
     {
-        bits = Speex.speex_bits_init();
+        bits = Speex.bits_init();
         if (bits == 0)
-            throw new ResourceUnavailableException("speex_bits_init");
+            throw new ResourceUnavailableException("bits_init");
     }
 
     /**
      * Processes (encode) a specific input <tt>Buffer</tt>.
      *
-     * @param inputBuffer input buffer
-     * @param outputBuffer output buffer
+     * @param inBuffer input buffer
+     * @param outBuffer output buffer
      * @return <tt>BUFFER_PROCESSED_OK</tt> if buffer has been successfully
      * processed
      * @see AbstractCodecExt#doProcess(Buffer, Buffer)
      */
     @Override
-    protected int doProcess(Buffer inputBuffer, Buffer outputBuffer)
+    protected int doProcess(Buffer inBuffer, Buffer outBuffer)
     {
-        Format inputFormat = inputBuffer.getFormat();
+        Format inFormat = inBuffer.getFormat();
 
-        if ((inputFormat != null)
-                && (inputFormat != this.inputFormat)
-                && !inputFormat.equals(this.inputFormat))
+        if ((inFormat != null)
+                && (inFormat != this.inputFormat)
+                && !inFormat.equals(this.inputFormat))
         {
-            if (null == setInputFormat(inputFormat))
+            if (null == setInputFormat(inFormat))
                 return BUFFER_PROCESSED_FAILED;
         }
-        inputFormat = this.inputFormat;
+        inFormat = this.inputFormat;
 
         /*
          * Make sure that the native Speex encoder which is represented by this
          * instance is configured to work with the inputFormat.
          */
-        AudioFormat inputAudioFormat = (AudioFormat) inputFormat;
-        int inputSampleRate = (int) inputAudioFormat.getSampleRate();
+        AudioFormat inAudioFormat = (AudioFormat) inFormat;
+        int inSampleRate = (int) inAudioFormat.getSampleRate();
 
-        if ((state != 0) && (sampleRate != inputSampleRate))
+        if ((state != 0) && (sampleRate != inSampleRate))
         {
-            Speex.speex_encoder_destroy(state);
+            Speex.encoder_destroy(state);
             state = 0;
             sampleRate = 0;
             frameSize = 0;
@@ -205,41 +205,32 @@ public class JNIEncoder
         if (state == 0)
         {
             long mode
-                = Speex.speex_lib_get_mode(
-                        (inputSampleRate == 16000)
-                            ? Speex.SPEEX_MODEID_WB
-                            : (inputSampleRate == 32000)
-                                ? Speex.SPEEX_MODEID_UWB
-                                : Speex.SPEEX_MODEID_NB);
+                = Speex.lib_get_mode(
+                        (inSampleRate == 16000)
+                            ? Speex.MODEID_WB
+                            : (inSampleRate == 32000)
+                                ? Speex.MODEID_UWB
+                                : Speex.MODEID_NB);
 
             if (mode == 0)
                 return BUFFER_PROCESSED_FAILED;
-            state = Speex.speex_encoder_init(mode);
+            state = Speex.encoder_init(mode);
             if (state == 0)
                 return BUFFER_PROCESSED_FAILED;
-            if (Speex.speex_encoder_ctl(
-                        state,
-                        Speex.SPEEX_SET_QUALITY,
-                        4)
-                    != 0)
+            if (Speex.encoder_ctl(state, Speex.SET_QUALITY, 4) != 0)
                 return BUFFER_PROCESSED_FAILED;
-            if (Speex.speex_encoder_ctl(
-                        state,
-                        Speex.SPEEX_SET_SAMPLING_RATE,
-                        inputSampleRate)
+            if (Speex.encoder_ctl(state, Speex.SET_SAMPLING_RATE, inSampleRate)
                     != 0)
                 return BUFFER_PROCESSED_FAILED;
 
-            int frameSize
-                = Speex.speex_encoder_ctl(state, Speex.SPEEX_GET_FRAME_SIZE);
+            int frameSize = Speex.encoder_ctl(state, Speex.GET_FRAME_SIZE);
 
             if (frameSize < 0)
                 return BUFFER_PROCESSED_FAILED;
 
-            sampleRate = inputSampleRate;
-            this.frameSize = frameSize * 2 /* (sampleSizeInBits / 8) */;
-            duration
-                = (((long) frameSize) * 1000 * 1000000) / (sampleRate);
+            sampleRate = inSampleRate;
+            this.frameSize = frameSize;
+            duration = (((long) frameSize) * 1000 * 1000000) / (sampleRate);
         }
 
         /*
@@ -249,128 +240,117 @@ public class JNIEncoder
          * have frameSize bytes. Remember whatever is left unprocessed in
          * previousInput and prepend it to the next inputBuffer.
          */
-        byte[] input = (byte[]) inputBuffer.getData();
-        int inputLength = inputBuffer.getLength();
-        int inputOffset = inputBuffer.getOffset();
+        short[] in = (short[]) inBuffer.getData();
+        int inLength = inBuffer.getLength();
+        int inOffset = inBuffer.getOffset();
 
-        if ((previousInput != null) && (previousInputLength > 0))
+        if ((prevIn != null) && (prevInLength > 0))
         {
-            if (previousInputLength < this.frameSize)
+            if (prevInLength < this.frameSize)
             {
-                if (previousInput.length < this.frameSize)
+                if (prevIn.length < this.frameSize)
                 {
-                    byte[] newPreviousInput = new byte[this.frameSize];
+                    short[] newPrevIn = new short[this.frameSize];
 
-                    System.arraycopy(
-                            previousInput, 0,
-                            newPreviousInput, 0,
-                            previousInput.length);
-                    previousInput = newPreviousInput;
+                    System.arraycopy(prevIn, 0, newPrevIn, 0, prevIn.length);
+                    prevIn = newPrevIn;
                 }
 
-                int bytesToCopyFromInputToPreviousInput
-                    = Math.min(
-                            this.frameSize - previousInputLength,
-                            inputLength);
+                int shortsToCopyFromInToPrevIn
+                    = Math.min(this.frameSize - prevInLength, inLength);
 
-                if (bytesToCopyFromInputToPreviousInput > 0)
+                if (shortsToCopyFromInToPrevIn > 0)
                 {
                     System.arraycopy(
-                            input, inputOffset,
-                            previousInput, previousInputLength,
-                            bytesToCopyFromInputToPreviousInput);
-                    previousInputLength += bytesToCopyFromInputToPreviousInput;
-                    inputLength -= bytesToCopyFromInputToPreviousInput;
-                    inputBuffer.setLength(inputLength);
-                    inputBuffer.setOffset(
-                            inputOffset + bytesToCopyFromInputToPreviousInput);
+                            in, inOffset,
+                            prevIn, prevInLength,
+                            shortsToCopyFromInToPrevIn);
+                    prevInLength += shortsToCopyFromInToPrevIn;
+                    inLength -= shortsToCopyFromInToPrevIn;
+                    inBuffer.setLength(inLength);
+                    inBuffer.setOffset(inOffset + shortsToCopyFromInToPrevIn);
                 }
             }
 
-            if (previousInputLength == this.frameSize)
+            if (prevInLength == this.frameSize)
             {
-                input = previousInput;
-                inputOffset = 0;
-                previousInputLength = 0;
+                in = prevIn;
+                inOffset = 0;
+                prevInLength = 0;
             }
-            else if (previousInputLength > this.frameSize)
+            else if (prevInLength > this.frameSize)
             {
-                input = new byte[this.frameSize];
-                System.arraycopy(previousInput, 0, input, 0, input.length);
-                inputOffset = 0;
-                previousInputLength -= input.length;
-                System.arraycopy(
-                        previousInput, input.length,
-                        previousInput, 0,
-                        previousInputLength);
+                in = new short[this.frameSize];
+                System.arraycopy(prevIn, 0, in, 0, in.length);
+                inOffset = 0;
+                prevInLength -= in.length;
+                System.arraycopy(prevIn, in.length, prevIn, 0, prevInLength);
             }
             else
             {
-                outputBuffer.setLength(0);
-                discardOutputBuffer(outputBuffer);
-                if (inputLength < 1)
+                outBuffer.setLength(0);
+                discardOutputBuffer(outBuffer);
+                if (inLength < 1)
                     return BUFFER_PROCESSED_OK;
                 else
                     return BUFFER_PROCESSED_OK | INPUT_BUFFER_NOT_CONSUMED;
             }
         }
-        else if (inputLength < 1)
+        else if (inLength < 1)
         {
-            outputBuffer.setLength(0);
-            discardOutputBuffer(outputBuffer);
+            outBuffer.setLength(0);
+            discardOutputBuffer(outBuffer);
             return BUFFER_PROCESSED_OK;
         }
-        else if (inputLength < this.frameSize)
+        else if (inLength < this.frameSize)
         {
-            if ((previousInput == null) || (previousInput.length < inputLength))
-                previousInput = new byte[this.frameSize];
-            System.arraycopy(input, inputOffset, previousInput, 0, inputLength);
-            previousInputLength = inputLength;
-            outputBuffer.setLength(0);
-            discardOutputBuffer(outputBuffer);
+            if ((prevIn == null) || (prevIn.length < inLength))
+                prevIn = new short[this.frameSize];
+            System.arraycopy(in, inOffset, prevIn, 0, inLength);
+            prevInLength = inLength;
+            outBuffer.setLength(0);
+            discardOutputBuffer(outBuffer);
             return BUFFER_PROCESSED_OK;
         }
         else
         {
-            inputLength -= this.frameSize;
-            inputBuffer.setLength(inputLength);
-            inputBuffer.setOffset(inputOffset + this.frameSize);
+            inLength -= this.frameSize;
+            inBuffer.setLength(inLength);
+            inBuffer.setOffset(inOffset + this.frameSize);
         }
 
         /* At long last, do the actual encoding. */
-        Speex.speex_bits_reset(bits);
-        Speex.speex_encode_int(state, input, inputOffset, bits);
+        Speex.bits_reset(bits);
+        Speex.encode_int(state, in, inOffset, bits);
 
         /* Read the encoded audio data from the SpeexBits into outputBuffer. */
-        int outputLength = Speex.speex_bits_nbytes(bits);
+        int outLength = Speex.bits_nbytes(bits);
 
-        if (outputLength > 0)
+        if (outLength > 0)
         {
-            byte[] output
-                = validateByteArraySize(outputBuffer, outputLength, false);
+            byte[] out = validateByteArraySize(outBuffer, outLength, false);
 
-            outputLength
-                = Speex.speex_bits_write(bits, output, 0, output.length);
-            if (outputLength > 0)
+            outLength = Speex.bits_write(bits, out, 0, out.length);
+            if (outLength > 0)
             {
-                outputBuffer.setDuration(duration);
-                outputBuffer.setFormat(getOutputFormat());
-                outputBuffer.setLength(outputLength);
-                outputBuffer.setOffset(0);
+                outBuffer.setDuration(duration);
+                outBuffer.setFormat(getOutputFormat());
+                outBuffer.setLength(outLength);
+                outBuffer.setOffset(0);
             }
             else
             {
-                outputBuffer.setLength(0);
-                discardOutputBuffer(outputBuffer);
+                outBuffer.setLength(0);
+                discardOutputBuffer(outBuffer);
             }
         }
         else
         {
-            outputBuffer.setLength(0);
-            discardOutputBuffer(outputBuffer);
+            outBuffer.setLength(0);
+            discardOutputBuffer(outBuffer);
         }
 
-        if (inputLength < 1)
+        if (inLength < 1)
             return BUFFER_PROCESSED_OK;
         else
             return BUFFER_PROCESSED_OK | INPUT_BUFFER_NOT_CONSUMED;
@@ -386,26 +366,26 @@ public class JNIEncoder
     @Override
     protected Format[] getMatchingOutputFormats(Format inputFormat)
     {
-        AudioFormat inputAudioFormat = (AudioFormat) inputFormat;
+        AudioFormat af = (AudioFormat) inputFormat;
 
         return
             new Format[]
                     {
                         new AudioFormat(
                                 Constants.SPEEX_RTP,
-                                inputAudioFormat.getSampleRate(),
-                                Format.NOT_SPECIFIED,
+                                af.getSampleRate(),
+                                /* sampleSizeInBits */ Format.NOT_SPECIFIED,
                                 1,
                                 AudioFormat.LITTLE_ENDIAN,
                                 AudioFormat.SIGNED,
-                                Format.NOT_SPECIFIED,
-                                Format.NOT_SPECIFIED,
+                                /* frameSizeInBits */ Format.NOT_SPECIFIED,
+                                /* frameRate */ Format.NOT_SPECIFIED,
                                 Format.byteArray)
                     };
     }
 
     /**
-     * Get the output format.
+     * Gets the output format.
      *
      * @return output format
      * @see net.sf.fmj.media.AbstractCodec#getOutputFormat()
@@ -413,35 +393,33 @@ public class JNIEncoder
     @Override
     public Format getOutputFormat()
     {
-        Format outputFormat = super.getOutputFormat();
+        Format f = super.getOutputFormat();
 
-        if ((outputFormat != null)
-                && (outputFormat.getClass() == AudioFormat.class))
+        if ((f != null) && (f.getClass() == AudioFormat.class))
         {
-            AudioFormat outputAudioFormat = (AudioFormat) outputFormat;
+            AudioFormat af = (AudioFormat) f;
 
-            outputFormat = setOutputFormat(
-                new AudioFormat(
-                            outputAudioFormat.getEncoding(),
-                            outputAudioFormat.getSampleRate(),
-                            outputAudioFormat.getSampleSizeInBits(),
-                            outputAudioFormat.getChannels(),
-                            outputAudioFormat.getEndian(),
-                            outputAudioFormat.getSigned(),
-                            outputAudioFormat.getFrameSizeInBits(),
-                            outputAudioFormat.getFrameRate(),
-                            outputAudioFormat.getDataType())
-                        {
-                            private static final long serialVersionUID = 0L;
-
-                            @Override
-                            public long computeDuration(long length)
-                            {
-                                return JNIEncoder.this.duration;
-                            }
-                        });
+            f
+                = setOutputFormat(
+                        new AudioFormat(
+                                    af.getEncoding(),
+                                    af.getSampleRate(),
+                                    af.getSampleSizeInBits(),
+                                    af.getChannels(),
+                                    af.getEndian(),
+                                    af.getSigned(),
+                                    af.getFrameSizeInBits(),
+                                    af.getFrameRate(),
+                                    af.getDataType())
+                                {
+                                    @Override
+                                    public long computeDuration(long length)
+                                    {
+                                        return JNIEncoder.this.duration;
+                                    }
+                                });
         }
-        return outputFormat;
+        return f;
     }
 
     /**
