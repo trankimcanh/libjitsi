@@ -241,12 +241,6 @@ public class MediaStreamImpl
     private final Vector<Long> remoteSourceIDs = new Vector<>(1, 1);
 
     /**
-     * The {@code MediaStreamTracks} of this {@code MediaStream}.
-     */
-    private Map<Long, MediaStreamTrack> remoteTracks
-        = Collections.synchronizedMap(new TreeMap<Long, MediaStreamTrack>());
-
-    /**
      * The <tt>RTPConnector</tt> through which this instance sends and receives
      * RTP and RTCP traffic. The instance is a <tt>TransformConnector</tt> in
      * order to also enable packet transformations.
@@ -416,11 +410,10 @@ public class MediaStreamImpl
                     : srtpControl;
 
         this.srtpControl.registerUser(this);
+        this.mediaStreamStatsImpl = new MediaStreamStats2Impl(this);
 
         if (connector != null)
             setConnector(connector);
-
-        this.mediaStreamStatsImpl = new MediaStreamStats2Impl(this);
 
         if (logger.isTraceEnabled())
         {
@@ -1096,6 +1089,14 @@ public class MediaStreamImpl
         if (discardEngine != null)
             engineChain.add(discardEngine);
 
+        MediaStreamTrackReceiver mediaStreamTrackReceiver
+            = getMediaStreamTrackReceiver();
+
+        if (mediaStreamTrackReceiver != null)
+        {
+            engineChain.add(mediaStreamTrackReceiver);
+        }
+
         // SRTP
         engineChain.add(srtpControl.getTransformEngine());
 
@@ -1527,6 +1528,18 @@ public class MediaStreamImpl
     }
 
     /**
+     * {@inheritDoc}
+     */
+    @Override
+    public MediaFormat getFormat(byte pt)
+    {
+        synchronized (dynamicRTPPayloadTypes)
+        {
+            return dynamicRTPPayloadTypes.get(pt);
+        }
+    }
+
+    /**
      * Returns the list of CSRC identifiers for all parties currently known
      * to contribute to the media that this stream is sending toward its remote
      * counter part. In other words, the method returns the list of CSRC IDs
@@ -1853,15 +1866,6 @@ public class MediaStreamImpl
          * prevent ConcurrentModificationException.
          */
         return Collections.unmodifiableList(remoteSourceIDs);
-    }
-
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public Map<Long, MediaStreamTrack> getRemoteTracks()
-    {
-        return remoteTracks;
     }
 
     /**
@@ -3672,92 +3676,128 @@ public class MediaStreamImpl
     }
 
     /**
-    * {@inheritDoc}
-    */
-    public boolean isKeyFrame(byte[] buf, int off, int len)
+     * Utility method that determines the temporal layer index (TID) of an RTP
+     * packet.
+     *
+     * @param buf the buffer that holds the RTP payload.
+     * @param off the offset in the buff where the RTP payload is found.
+     * @param len then length of the RTP payload in the buffer.
+     *
+     * @return the TID of the packet, -1 otherwise.
+     *
+     * FIXME(gp) conceptually this belongs to the {@link VideoMediaStreamImpl},
+     * but I don't want to be obliged to cast to use this method.
+     */
+    public int getTemporalID(byte[] buf, int off, int len)
     {
-        if (buf == null || buf.length < off + len)
+        REDBlock redBlock = getPayloadBlock(buf, off, len);
+        if (redBlock == null || redBlock.getLength() == 0)
+        {
+            return -1;
+        }
+
+        final byte vp8PT = getDynamicRTPPayloadType(Constants.VP8);
+
+        if (redBlock.getPayloadType() == vp8PT)
+        {
+            return org.jitsi.impl
+                .neomedia.codec.video.vp8.DePacketizer.VP8PayloadDescriptor
+                .getTemporalLayerIndex(
+                    redBlock.getBuffer(),
+                    redBlock.getOffset(),
+                    redBlock.getLength());
+        }
+        else
+        {
+            return -1;
+        }
+    }
+
+    /**
+     * Utility method that determines whether or not a packet is a start of
+     * frame.
+     *
+     * @param buf the buffer that holds the RTP payload.
+     * @param off the offset in the buff where the RTP payload is found.
+     * @param len then length of the RTP payload in the buffer.
+     *
+     * @return true if the packet is the start of a frame, false otherwise.
+     *
+     * FIXME(gp) conceptually this belongs to the {@link VideoMediaStreamImpl},
+     * but I don't want to be obliged to cast to use this method.
+     *
+     */
+    public boolean isStartOfFrame(byte[] buf, int off, int len)
+    {
+        REDBlock redBlock = getPayloadBlock(buf, off, len);
+        if (redBlock == null || redBlock.getLength() == 0)
         {
             return false;
         }
 
-        Byte redPT = null, vp8PT = null, h264PT = null;
-        for (Map.Entry<Byte, MediaFormat> entry :
-            getDynamicRTPPayloadTypes().entrySet())
-        {
-            String encoding = entry.getValue().getEncoding();
-            Byte payloadType = entry.getKey();
+        final byte vp8PT = getDynamicRTPPayloadType(Constants.VP8);
 
-            if (Constants.RED.equalsIgnoreCase(encoding))
-            {
-                redPT = payloadType;
-            }
-            else if (Constants.VP8.equalsIgnoreCase(encoding))
-            {
-                vp8PT = payloadType;
-            }
-            else if (Constants.H264.equalsIgnoreCase(encoding))
-            {
-                h264PT = payloadType;
-            }
+        if (redBlock.getPayloadType() == vp8PT)
+        {
+            return org.jitsi.impl
+                .neomedia.codec.video.vp8.DePacketizer.VP8PayloadDescriptor
+                .isStartOfFrame(redBlock.getBuffer(), redBlock.getOffset());
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    /**
+     * Utility method that determines whether or not a packet is an end of
+     * frame.
+     *
+     * @param buf the buffer that holds the RTP payload.
+     * @param off the offset in the buff where the RTP payload is found.
+     * @param len then length of the RTP payload in the buffer.
+     *
+     * @return true if the packet is the end of a frame, false otherwise.
+     *
+     * FIXME(gp) conceptually this belongs to the {@link VideoMediaStreamImpl},
+     * but I don't want to be obliged to cast to use this method.
+     *
+     */
+    public boolean isEndOfFrame(byte[] buf, int off, int len)
+    {
+        // XXX(gp) this probably won't work well with spatial scalability.
+        return RawPacket.isPacketMarked(buf, off, len);
+    }
+
+    /**
+    * {@inheritDoc}
+    */
+    public boolean isKeyFrame(byte[] buf, int off, int len)
+    {
+        REDBlock redBlock = getPayloadBlock(buf, off, len);
+        if (redBlock == null || redBlock.getLength() == 0)
+        {
+            return false;
         }
 
-        int payloadOff, payloadLen;
-        byte payloadType;
+        final byte vp8PT = getDynamicRTPPayloadType(Constants.VP8),
+            h264PT = getDynamicRTPPayloadType(Constants.H264);
 
-        try {
-          // XXX this will not work correctly when RTX gets enabled!
-            if (redPT != null
-                && redPT == RawPacket.getPayloadType(buf, off, len))
-            {
-                // XXX There's RawPacket#getPayloadLength() but the implementation
-                // includes pkt.paddingSize at the time of this writing and
-                // we do not know whether that's going to stay that way
-                REDBlock block = REDBlockIterator
-                    .getPrimaryBlock(buf,
-                        RawPacket.getPayloadOffset(buf, off, len),
-                        RawPacket.getPayloadLength(buf, off, len)
-                            - RawPacket.getPaddingSize(buf, off, len)
-                            - RawPacket.getHeaderLength(buf, off, len));
-
-                payloadOff = block.getOffset();
-                payloadLen = block.getLength();
-                payloadType = block.getPayloadType();
-            }
-            else
-            {
-                // XXX There's RawPacket#getPayloadLength() but the implementation
-                // includes pkt.paddingSize at the time of this writing and
-                // we do not know whether that's going to stay that way
-                payloadOff = RawPacket.getPayloadOffset(buf, off, len);
-                payloadLen = RawPacket.getPayloadLength(buf, off, len)
-                    - RawPacket.getPayloadOffset(buf, off, len)
-                    - RawPacket.getHeaderLength(buf, off, len);
-                payloadType
-                    = RawPacket.getPayloadType(buf, off, len);
-            }
-            if (vp8PT != null && payloadType == vp8PT)
-            {
-                return org.jitsi.impl.neomedia.codec.video.vp8.DePacketizer
-                    .isKeyFrame(buf, payloadOff, payloadLen);
-            } else if (h264PT != null && payloadType == h264PT)
-            {
-                return org.jitsi.impl.neomedia.codec.video.h264.DePacketizer
-                    .isKeyFrame(buf, payloadOff, len);
-            }
-            else
-            {
-                return false;
-            }
-        }
-        catch (ArrayIndexOutOfBoundsException e)
+        if (redBlock.getPayloadType() == vp8PT)
         {
-            // While ideally we should check the bounds everywhere and not
-            // attempt to access the packet's buffer at invalid indexes, there
-            // are too many places where it could inadvertently happen. It's
-            // safer to return a default value of 'false' from this utility
-            // method than to risk killing a thread which doesn't expect this.
-            logger.warn("Caught an exception while checking for keyframe:", e);
+            return org.jitsi.impl.neomedia.codec.video.vp8.DePacketizer
+                .isKeyFrame(buf, redBlock.getOffset(), redBlock.getLength());
+        }
+        else if (redBlock.getPayloadType() == h264PT)
+        {
+            return org.jitsi.impl.neomedia.codec.video.h264.DePacketizer
+                .isKeyFrame(
+                    redBlock.getBuffer(),
+                    redBlock.getOffset(),
+                    redBlock.getLength());
+        }
+        else
+        {
             return false;
         }
     }
@@ -3792,6 +3832,34 @@ public class MediaStreamImpl
     public TransformEngineChain getTransformEngineChain()
     {
         return transformEngineChain;
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public REDBlock getPayloadBlock(byte[] buf, int off, int len)
+    {
+        if (buf == null || buf.length < off + len
+            || len < net.sf.fmj.media.rtp.RTPHeader.SIZE)
+        {
+            return null;
+        }
+
+        final byte redPT = getDynamicRTPPayloadType(Constants.RED),
+            pktPT = (byte) RawPacket.getPayloadType(buf, off, len);
+
+        if (redPT == pktPT)
+        {
+            return REDBlockIterator.getPrimaryBlock(buf, off, len);
+        }
+        else
+        {
+            final int payloadOff = RawPacket.getPayloadOffset(buf, off, len),
+                payloadLen = RawPacket.getPayloadLength(buf, off, len, true);
+
+            return new REDBlock(buf, payloadOff, payloadLen, pktPT);
+        }
     }
 
     /**
