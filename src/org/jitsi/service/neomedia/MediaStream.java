@@ -19,13 +19,10 @@ import java.beans.*;
 import java.net.*;
 import java.util.*;
 
-import org.jitsi.impl.neomedia.*;
-import org.jitsi.impl.neomedia.codec.*;
 import org.jitsi.impl.neomedia.rtp.*;
 import org.jitsi.impl.neomedia.transform.*;
 import org.jitsi.service.neomedia.device.*;
 import org.jitsi.service.neomedia.format.*;
-import org.jitsi.service.neomedia.rtp.*;
 import org.jitsi.service.neomedia.stats.*;
 
 /**
@@ -515,38 +512,19 @@ public interface MediaStream
     /**
      * Utility method that determines whether or not a packet is a key frame.
      *
-     * @param buf the buffer that holds the RTP payload.
-     * @param off the offset in the buff where the RTP payload is found.
-     * @param len then length of the RTP payload in the buffer.
+     * @param buf the buffer that holds the RTP packet.
+     * @param off the offset in the buff where the RTP packet is found.
+     * @param len then length of the RTP packet in the buffer.
      * @return true if the packet is a key frame, false otherwise.
      */
     boolean isKeyFrame(byte[] buf, int off, int len);
-    /**
-     * Gets the current active <tt>RTCPTerminationStrategy</tt> which is to
-     * inspect and modify RTCP traffic between multiple <tt>MediaStream</tt>s.
-     *
-     * @return the <tt>RTCPTerminationStrategy</tt> which is to inspect and
-     * modify RTCP traffic between multiple <tt>MediaStream</tt>s.
-     */
-    RTCPTerminationStrategy getRTCPTerminationStrategy();
 
     /**
-     * Sets the current active <tt>RTCPTerminationStrategy</tt> which is to
-     * inspect and modify RTCP traffic between multiple <tt>MediaStream</tt>s.
+     * Utility method that determines whether or not a packet is a key frame.
      *
-     * @param rtcpTerminationStrategy the <tt>RTCPTerminationStrategy</tt> which
-     * is to inspect and modify RTCP traffic between multiple
-     * <tt>MediaStream</tt>s.
+     * @param pkt the packet.
      */
-    void setRTCPTerminationStrategy(
-        RTCPTerminationStrategy rtcpTerminationStrategy);
-
-    /**
-     * Gets the {@link RawPacketCache} which (optionally) caches outgoing
-     * packets for this {@link MediaStream}, if it exists.
-     * @return the {@link RawPacketCache} for this {@link MediaStream}.
-     */
-    RawPacketCache getPacketCache();
+    boolean isKeyFrame(RawPacket pkt);
 
     /**
      * @return the {@link RetransmissionRequester} for this media stream.
@@ -557,18 +535,6 @@ public interface MediaStream
      * Gets the {@link TransformEngineChain} of this {@link MediaStream}.
      */
     TransformEngineChain getTransformEngineChain();
-
-    /**
-     * Gets the {@link REDBlock} that contains the payload of the packet passed
-     * in as a parameter.
-     *
-     * @param buf the buffer that holds the RTP payload.
-     * @param off the offset in the buff where the RTP payload is found.
-     * @param len then length of the RTP payload in the buffer.
-     * @return the {@link REDBlock} that contains the payload of the packet
-     * passed in as a parameter, or null if the buffer is invalid.
-     */
-    REDBlock getPayloadBlock(byte[] buf, int off, int len);
 
     /**
      * Gets the {@link MediaStreamTrackReceiver} of this {@link MediaStream}.
